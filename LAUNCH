@@ -1,0 +1,5 @@
+# blaze build -c opt --copt=-mavx --config=cuda \
+#  learning/brain/public/tensorflow_std_server{,_gpu} \
+#  experimental/users/danilevy/l2hmc/run.par
+  
+/google/data/ro/teams/traino/borgcfg --skip_confirmation --vars "exp_id=test,cell=ok,gpu_priority=115,use_allocator=true,hparams='learning_rate=0.003,optimizer=rmsprop,loss=logsumexp,task=gaussian_2'" experimental/users/danilevy/l2hmc/launch.borg reload
