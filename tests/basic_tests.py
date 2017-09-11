@@ -1,3 +1,17 @@
+# Copyright 2017 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Tests for the Learning to MCMC project
 Tests consist of:
@@ -11,18 +25,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from google3.pyglib import app
-from google3.pyglib import flags
-
-FLAGS = flags.FLAGS
-
-import tensorflow.google as tf
+import tensorflow as tf
 import numpy as np
 
-from google3.experimental.users.danilevy.l2hmc.utils.func_utils import accept, jacobian
-from google3.experimental.users.danilevy.l2hmc.utils.distributions import Gaussian
-from google3.experimental.users.danilevy.l2hmc.utils.layers import Linear
-from google3.experimental.users.danilevy.l2hmc.utils.sampler import Sampler
+from ..utils.func_utils import accept, jacobian
+from ..utils.distributions import Gaussian
+from ..utils.layers import Linear
+from ..utils.dynamics import Dynamics
 
 NUM_SAMPLES = 200
 X_DIM = 2
@@ -98,7 +107,7 @@ def moments(list_samples):
   assert np.linalg.norm(var - true_var) < 1e-1
 
 def check_moments_hmc():
-  hmc_s = Sampler(X_DIM, DISTRIBUTION.get_energy_function(), T=10, eps=0.1, hmc=True, eps_trainable=False)
+  hmc_s = Dynamics(X_DIM, DISTRIBUTION.get_energy_function(), T=10, eps=0.1, hmc=True, eps_trainable=False)
 
   x = tf.placeholder(tf.float32, shape=(NUM_SAMPLES, X_DIM))
   X, _, p = hmc_s.forward(x)
@@ -122,7 +131,7 @@ def check_moments_hmc():
 def check_radford_trajectory():
   g = Gaussian(np.zeros((2,)), np.array([[1.0, 0.95], [0.95, 1.0]]))
   
-  hmc_s = Sampler(X_DIM, g.get_energy_function(), T=25, eps=0.25, hmc=True, eps_trainable=False)
+  hmc_s = Dynamics(X_DIM, g.get_energy_function(), T=25, eps=0.25, hmc=True, eps_trainable=False)
 
   x = tf.constant(np.array([[-1.50, -1.55]]).astype('float32'))
   v = tf.constant(np.array([[-1., 1.]]).astype('float32'))
@@ -140,7 +149,7 @@ def check_radford_trajectory():
     assert np.linalg.norm(expected_p - p_) < 1e-4
 
 def check_moments():
-  sampler = Sampler(
+  sampler = Dynamics(
       X_DIM,
       DISTRIBUTION.get_energy_function(),
       T=10,
@@ -190,7 +199,7 @@ def check_forward_backward_step():
   x = tf.random_normal((NUM_SAMPLES, X_DIM))
   v = tf.random_normal((NUM_SAMPLES, X_DIM))
 
-  s = Sampler(
+  s = Dynamics(
       X_DIM,
       DISTRIBUTION.get_energy_function(),
       T=10,
@@ -217,7 +226,7 @@ def check_forward_backward_full():
   x = tf.random_normal((NUM_SAMPLES, X_DIM))
   v = tf.random_normal((NUM_SAMPLES, X_DIM))
 
-  s = Sampler(
+  s = Dynamics(
       X_DIM,
       DISTRIBUTION.get_energy_function(),
       T=10,
@@ -243,7 +252,7 @@ def check_jacobian():
   def netf(x_dim, scope, factor):
     return Network(x_dim, scope=scope, factor=100 * factor)
 
-  sampler = Sampler(
+  sampler = Dynamics(
       X_DIM,
       DISTRIBUTION.get_energy_function(),
       T=10,
@@ -283,7 +292,7 @@ def check_while_loop():
 
   distribution = Gaussian(np.zeros((2,)), np.array([[1.0, 0.], [0., 0.1]]))
 
-  s = Sampler(
+  s = Dynamics(
       X_DIM,
       distribution.get_energy_function(),
       T=10,
@@ -330,4 +339,4 @@ def main(argv):
   print('All tests passed!')
   
 if __name__ == '__main__':
-  app.run(main)
+  tf.app.run(main)

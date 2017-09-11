@@ -1,32 +1,40 @@
-"""TODO(danilevy): DO NOT SUBMIT without one-line documentation for run.
-
-TODO(danilevy): DO NOT SUBMIT without a detailed description of run.
+# Copyright 2017 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Run file for experimentation
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from google3.pyglib import app
-from google3.pyglib import flags
+from tensorflow.python.platform import gfile
 
-from google3.learning.brain.python.platform import flags
-from google3.learning.brain.python.platform import gfile
+from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihood
+from utils.distributions import Gaussian, GMM, gen_ring
+from utils.layers import Linear
+from utils.dynamics import Dynamics
 
-from google3.experimental.users.danilevy.l2hmc.utils.func_utils import accept, jacobian, autocovariance, get_log_likelihood
-from google3.experimental.users.danilevy.l2hmc.utils.distributions import Gaussian, GMM, gen_ring
-from google3.experimental.users.danilevy.l2hmc.utils.layers import Linear
-from google3.experimental.users.danilevy.l2hmc.utils.sampler import Sampler
-
-import tensorflow.google as tf
+import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-FLAGS = flags.FLAGS
 
-flags.DEFINE_string('master', 'local', 'bns')
-flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
-flags.DEFINE_string('train_dir', '/tmp/l2hmc/0/4', 'Training directory')
+FLAGS = tf.app.flags.FLAGS
+
+tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
+tf.app.flags.DEFINE_string('train_dir', '/tmp/l2hmc/0/4', 'Training directory')
 
 TASKS = {
     'mog': {
@@ -196,7 +204,7 @@ def main(_):
     eps = task['eps']
     T = task['T']
 
-    s = Sampler(
+    s = Dynamics(
         X_DIM,
         distribution.get_energy_function(),
         T=T, eps=eps,
@@ -264,7 +272,7 @@ def main(_):
     # First get HMC samples
 
     with tf.variable_scope('hmc_samples'):
-      hmc_sampler = Sampler(
+      hmc_sampler = Dynamics(
           X_DIM, distribution.get_energy_function(), T=T, eps=eps, eps_trainable=False, hmc=True
       )
 
