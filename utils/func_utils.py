@@ -25,8 +25,6 @@ import tensorflow as tf
 import numpy as np
 from scipy.stats import multivariate_normal
 
-FLAGS = flags.FLAGS
-
 def prout():
   return 3
 
@@ -70,3 +68,33 @@ def get_log_likelihood(X, gaussian):
   m = multivariate_normal(mean=gaussian.mu, cov=gaussian.sigma)
   return m.logpdf(X).mean()
 
+def get_data():
+  mnist = input_data.read_data_sets("MNIST_data/", validation_size=0)
+  train_data = mnist.train.next_batch(60000, shuffle=False)[0]
+  test_data = mnist.test.next_batch(10000, shuffle=False)[0]
+  return train_data, test_data
+
+def binarize(x):
+  assert(x.max() <= 1.)
+  return (np.random.random(x.shape) < x).astype(np.float32)
+
+def normal_kl(q_means, q_stddevs, p_means, p_stddevs):
+  '''Returns the KL divergence between two normal distributions q and p.
+  
+  KLs are summed over the inner dimension.
+  
+  Args:
+    `q_means`: Means of q.
+    `q_stddevs`: Standard deviations of q.
+    `p_means`: Means of p.
+    `p_stddevs`: Standard deviations of p.
+  '''
+
+  # The log(2*pi) terms cancel, so no need to compute them.
+  q_entropy = 0.5 + tf.log(q_stddevs)
+  # E_q[(z - p_means)**2] = (q_means - p_means)**2 + q_stddevs**2
+  q_p_cross_entropy = 0.5 * tf.square(q_stddevs / p_stddevs)
+  q_p_cross_entropy += 0.5 * tf.square((q_means - p_means) / p_stddevs)
+  q_p_cross_entropy += tf.log(p_stddevs)
+  q_p_kl = tf.reduce_sum(-q_entropy + q_p_cross_entropy, -1)
+  return q_p_kl
