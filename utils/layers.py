@@ -65,3 +65,41 @@ class ConcatLinear(object):
       output += self.layers[i](x)
 
     return output
+
+class Parallel(object):
+  def __init__(self, layers=[]):
+    self.layers = layers
+  def add(self, layer):
+    self.layers.append(layer)
+  def __call__(self, x):
+    return [layer(x) for layer in self.layers]
+
+class Sequential(object):
+  def __init__(self, layers = []):
+    self.layers = layers
+        
+  def add(self, layer):
+    self.layers.append(layer)
+        
+  def __call__(self, x):
+    y = x
+    for layer in self.layers:
+      y = layer(y)
+    return y
+
+class ScaleTanh(object):
+  def __init__(self, in_, scope='scale_tanh'):
+    with tf.variable_scope(scope):
+      self.scale = tf.exp(tf.get_variable('scale', shape=(1, in_), initializer=tf.constant_initializer(0.)))
+  def __call__(self, x):
+    return self.scale * tf.nn.tanh(x)
+    
+class Zip(object):
+  def __init__(self, layers=[]):
+    self.layers = layers
+    
+  def __call__(self, x):
+    assert len(x) == len(self.layers)
+    n = len(self.layers)
+    return [self.layers[i](x[i]) for i in range(n)]
+
