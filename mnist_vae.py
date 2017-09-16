@@ -1,4 +1,4 @@
-import time
+import time, sys, string
 
 import tensorflow as tf
 import numpy as np
@@ -54,7 +54,7 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     batch_size=128,
     latent_dim=50,
     update_sampler_every=1,
-    eval_samples_every=5,
+    eval_samples_every=1,
 )
 
 OPTIMIZERS = {
@@ -66,9 +66,25 @@ OPTIMIZERS = {
 
 def main(_):
     hps = DEFAULT_HPARAMS
+    print(FLAGS.hparams)
     hps.parse(FLAGS.hparams)
-    print(hps)
-    
+
+    # hack for logdir
+    hps_values = hps.values()
+    del(hps_values['epoch'])
+    del(hps_values['eval_samples_every'])
+
+    train_folder = string.join(
+        [
+            str(k)+'='+str(hps_values[k]) 
+            for k in hps_values
+        ],
+        ',',
+    )
+
+    logdir = '/logs/%s' % train_folder
+
+    sys.exit()
     float_x_train, float_x_test = get_data()
     N = float_x_train.shape[0]
     
@@ -206,20 +222,37 @@ def main(_):
         axis=0
     )
 
+    tf.summary.scalar('sampler_loss', sampler_loss)
+    tf.summary.scalar('log_prob', log_prob)
+    tf.summary.scalar('elbo', elbo)
+
+    loss_summaries = tf.summary.merge_all()
+
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     sampler_train_op = opt.minimize(sampler_loss, var_list=var_from_scope('sampler'))
     decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
     
     z_eval = tf.random_normal((64, 50))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
-    
+
+    samples_summary = tf.summary.image(
+        'samples',
+        tf.reshape(x_eval, (-1, 28, 28, 1)),
+        64,
+    )
+
     time0 = time.time()
     
     batch_per_epoch = N / hps.batch_size
     
+    saver = tf.train.Saver()
+    writer = tf.summary.FileWriter(logdir)
+
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
     
+    counter = 0
+
     for e in range(hps.epoch):
         x_train = binarize_and_shuffle(float_x_train)
         
@@ -229,7 +262,10 @@ def main(_):
             
             batch = x_train[start:end, :]
             
-            fetches = [elbo, sampler_loss, log_prob, elbo_train_op, decoder_train_op]
+            fetches = [
+                elbo, sampler_loss, log_prob, loss_summaries, \
+                elbo_train_op, decoder_train_op
+            ]
             
             if t % hps.update_sampler_every == 0:
                 fetches += [sampler_train_op]
@@ -240,7 +276,13 @@ def main(_):
                 print '%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
                     % (t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
                 time0 = time.time()
-            
+
+            writer.add_summary(fetches[3], global_step=counter)
+            counter += 1
+        if e % hps.eval_samples_every == 0:
+            saver.save(sess, '%s/model.ckpt' % logdir)
+            samples_summary_ = sess.run(samples_summary)
+            writer.add_summary(fetches, global_step=(e / hps.eval_samples_every))
 
 if __name__ == '__main__':
     tf.app.run(main)
