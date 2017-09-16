@@ -1,0 +1,5 @@
+CUDA_VISIBLE_DEVICES=1 python mnist_vae.py --hparams "learning_rate=0.00001,update_sampler_every=5,batch_size=256"
+CUDA_VISIBLE_DEVICES=1 python mnist_vae.py --hparams "learning_rate=0.00001,update_sampler_every=5,batch_size=512,MH=2"
+CUDA_VISIBLE_DEVICES=1 python mnist_vae.py --hparams "learning_rate=0.00001,update_sampler_every=5,batch_size=512,MH=10"
+CUDA_VISIBLE_DEVICES=1 python mnist_vae.py --hparams "learning_rate=0.00001,update_sampler_every=5,batch_size=512,leapfrogs=10,MH=2"
+CUDA_VISIBLE_DEVICES=1 python mnist_vae.py --hparams "learning_rate=0.00001,update_sampler_every=5,batch_size=512,leapfrogs=2,MH=2"

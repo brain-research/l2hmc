@@ -51,6 +51,13 @@ class Dynamics(object):
     self.eps = safe_exp(alpha, name='alpha')
     self._fn = energy_function
 
+    m = np.zeros((x_dim,))
+    m[np.arange(0, x_dim, 2)] = 1
+    mb = 1 - m
+
+    self.m = tf.constant(m, dtype=tf.float32)
+    self.mb = tf.constant(mb, dtype=tf.float32)
+
     # if HMC we just return all zeros
     if hmc:
       z = lambda x, *args, **kwargs: tf.zeros_like(x)
@@ -91,7 +98,7 @@ class Dynamics(object):
 
     v_h = tf.multiply(v, safe_exp(sv1, name='sv1F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1F'), self.grad_energy(x, aux=aux)) + tv1)
 
-    m, mb = self._gen_mask(x)
+    m, mb = self.m, self.mb
 
     X1 = self.XNet([v_h, m * x, t, aux])
     
@@ -130,7 +137,7 @@ class Dynamics(object):
 
     v_h = tf.multiply((v_o - 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2B'), self.grad_energy(x_o, aux=aux)) + tv2)), safe_exp(sv2, name='sv2B'))
 
-    m, mb = self._gen_mask(x_o)
+    m, mb = self.m, self.mb
     
     X1 = self.XNet([v_h, mb * x_o, t, aux])
     
@@ -236,7 +243,7 @@ class Dynamics(object):
     )
 
     # tf.add_to_collection('forward', array.stack())
-    return tf.check_numerics(X, message='forward X'), V, self.p_accept(x, v, X, V, log_jac, aux=aux)
+    return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
   def backward(self, x, init_v=None, aux=None):
     if init_v is None:
@@ -262,7 +269,7 @@ class Dynamics(object):
         loop_vars=[x, v, t, j]
     )
     # tf.add_to_collection('backward', array.stack())
-    return tf.check_numerics(X, message='backward X'), V, self.p_accept(x, v, X, V, log_jac, aux=aux)
+    return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
   def p_accept(self, x0, v0, x1, v1, log_jac, aux=None):
     e_new = self.hamiltonian(x1, v1, aux=aux)
