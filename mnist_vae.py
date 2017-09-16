@@ -82,9 +82,10 @@ def main(_):
         ',',
     )
 
-    logdir = '/logs/%s' % train_folder
+    logdir = 'logs/%s' % train_folder
 
-    sys.exit()
+    print('Saving logs to %s' % logdir)
+
     float_x_train, float_x_test = get_data()
     N = float_x_train.shape[0]
     
@@ -277,12 +278,12 @@ def main(_):
                     % (t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
                 time0 = time.time()
 
-            writer.add_summary(fetches[3], global_step=counter)
+            writer.add_summary(fetched[3], global_step=counter)
             counter += 1
         if e % hps.eval_samples_every == 0:
             saver.save(sess, '%s/model.ckpt' % logdir)
             samples_summary_ = sess.run(samples_summary)
-            writer.add_summary(fetches, global_step=(e / hps.eval_samples_every))
+            writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
 if __name__ == '__main__':
     tf.app.run(main)
