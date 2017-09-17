@@ -82,7 +82,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/%s' % train_folder
+    logdir = 'logs/random_mask/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
