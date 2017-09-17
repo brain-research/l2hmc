@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Dyanmics object
+Dynamics object
 """
 
 from __future__ import absolute_import
@@ -42,14 +42,14 @@ class Dynamics(object):
     self.use_temperature = use_temperature
     self.temperature = tf.placeholder(tf.float32, shape=())
     
-    if hmc:
+    if not hmc:
         alpha = tf.get_variable(
             'alpha',
             initializer=tf.log(tf.constant(eps)),
             trainable=eps_trainable,
         )
     else:
-        alpha = tf.constant(eps, dtype=tf.float32)
+        alpha = tf.log(tf.constant(eps, dtype=tf.float32))
 
     self.eps = safe_exp(alpha, name='alpha')
     self._fn = energy_function
@@ -57,12 +57,12 @@ class Dynamics(object):
 
     self._init_mask()
     
-    m = np.zeros((x_dim,))
-    m[np.arange(0, x_dim, 2)] = 1
-    mb = 1 - m
+    # m = np.zeros((x_dim,))
+    # m[np.arange(0, x_dim, 2)] = 1
+    # mb = 1 - m
 
-    self.m = tf.constant(m, dtype=tf.float32)
-    self.mb = tf.constant(mb, dtype=tf.float32)
+    # self.m = tf.constant(m, dtype=tf.float32)
+    # self.mb = tf.constant(mb, dtype=tf.float32)
 
     # if HMC we just return all zeros
     if hmc:
@@ -132,6 +132,7 @@ class Dynamics(object):
     y = m * x + mb * (tf.multiply(x, safe_exp(sx1, name='sx1F')) + self.eps * (tf.multiply(safe_exp(fx1, name='fx1F'), v_h) + tx1))
     
     X2 = self.XNet([v_h, mb * y, t, aux])
+
     sx2 = (self.eps * X2[0])
     tx2 = X2[1]
     fx2 = self.eps * X2[2]
@@ -246,32 +247,20 @@ class Dynamics(object):
     dN = tf.shape(x)[0]
     t = tf.constant(0.)
     j = tf.zeros((dN,))
-    
-#     curr_x, curr_v = x, v
-    
-#     log_jac = 0.
-    
-#     for t in range(self.T):
-#       curr_x, curr_v, log_j = self._forward_step(curr_x, curr_v, t, aux=aux)
-#       log_jac += log_j
-    
-#     return curr_x, curr_v, self.p_accept(x, v, curr_x, curr_v
+
     def body(x, v, t, j):
-      #array = array.write(tf.cast(t, tf.int32), x)
       new_x, new_v, log_j = self._forward_step(x, v, t, aux=aux)
       return new_x, new_v, t+1, j+log_j
 
     def cond(x, v, t, j):
       return tf.less(t, self.T)
 
-    # X, V, t, log_jac, array = tf.while_loop(cond=cond, body=body, loop_vars=[x, v, t, j, tf.TensorArray(tf.float32, size=self.T)])
     X, V, t, log_jac = tf.while_loop(
         cond=cond,
         body=body,
         loop_vars=[x, v, t, j]
     )
 
-    # tf.add_to_collection('forward', array.stack())
     return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
   def backward(self, x, init_v=None, aux=None):
@@ -285,7 +274,6 @@ class Dynamics(object):
     j = tf.zeros((dN,), name='acc_jac_backward')
 
     def body(x, v, t, j):
-      # array = array.write(tf.cast(t, tf.int32), x)
       new_x, new_v, log_j = self._backward_step(x, v, self.T - t - 1, aux=aux)
       return new_x, new_v, t+1, j+log_j
 
@@ -297,27 +285,10 @@ class Dynamics(object):
         body=body,
         loop_vars=[x, v, t, j]
     )
-    # tf.add_to_collection('backward', array.stack())
     return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
   def p_accept(self, x0, v0, x1, v1, log_jac, aux=None):
     e_new = self.hamiltonian(x1, v1, aux=aux)
     e_old = self.hamiltonian(x0, v0, aux=aux)
 
-    tf.add_to_collection('old_energy', e_old)
-    tf.add_to_collection('new_energy', e_new)
-    tf.add_to_collection('log_jac', log_jac)
-
     return tf.exp(tf.minimum(e_old - e_new + log_jac, 0.0))
-
-  #  return safe_exp(tf.minimum(tf.check_numerics(e_old - e_new + log_jac, message='inside safe exp is NaN'), 0.0), name='acceptance log prob')
-
-#   def _gen_mask(self, x):
-#     dX = x.get_shape().as_list()[1]
-#     b = np.zeros(dX,)
-#     s = np.random.permutation(dX,)
-#     b[s[:dX/2]] = 1
-#     b = b.astype('bool')
-#     nb = np.logical_not(b)
-#
-#     return b, nb

@@ -43,84 +43,84 @@ size1 = 10
 size2 = 10
 
 
-# def net_factory(x_dim, scope, factor):
-#     with tf.variable_scope(scope):
-#         net = Sequential([
-#             Zip([
-#                 Linear(x_dim, size1, scope='embed_1', factor=0.33),
-#                 Linear(x_dim, size1, scope='embed_2', factor=factor * 0.33),
-#                 Linear(2, size1, scope='embed_3', factor=0.33),
-#                 lambda _: 0.,
-#             ]),
-#             sum,
-#             tf.nn.relu,
-#             Linear(size1, size2, scope='linear_1'),
-#             tf.nn.relu,
-#             Parallel([
-#                 Sequential([
-#                     Linear(size2, x_dim, scope='linear_s', factor=0.5), 
-#                     ScaleTanh(x_dim, scope='scale_s')
-#                 ]),
-#                 Linear(size2, x_dim, scope='linear_t', factor=0.5),
-#                 Sequential([
-#                     Linear(size2, x_dim, scope='linear_f', factor=0.5),
-#                     ScaleTanh(x_dim, scope='scale_f'),
-#                 ]),
-#             ]),  
-#         ])
-
-#         return net
-
-# NET_FACTORY = net_factory
-
-class Network(object):
-  def __init__(self, x_dim, scope='Network', factor=1.0):
-    with tf.variable_scope(scope):
-      self.embed_1 = Linear(x_dim, size1, scope='embed_1', factor=1.0 / 3)
-      self.embed_2 = Linear(x_dim, size1, scope='embed_2', factor=factor * 1.0 / 3)
-      self.embed_3 = Linear(2, size1, scope='embed_3', factor=1.0 / 3)
-
-      self.linear_1 = Linear(size1, size2, scope='linear_1')
-
-      self.scaling_S = tf.exp(tf.get_variable('scale_s', shape=(1, x_dim), initializer=tf.constant_initializer(0.)))
-      self.scaling_F = tf.exp(tf.get_variable('scale_f', shape=(1, x_dim), initializer=tf.constant_initializer(0.)))
-      self.linear_s = Linear(size2, x_dim, scope='linear_s', factor=0.1)
-      self.linear_t = Linear(size2, x_dim, scope='linear_t', factor=0.1)
-      self.linear_f = Linear(size2, x_dim, scope='linear_f', factor=0.1)
-
-  def hidden(self, x, v, t, aux=None):
-    z1 = self.embed_1(x)
-    z2 = self.embed_2(v)
-    z3 = self.embed_3(t)
-
-    h1 = tf.nn.relu(z1 + z2 + z3)
-
-    return tf.nn.relu(self.linear_1(h1))
-
-  def S(self, x, v, t, aux=None):
-    h = self.hidden(x, v, t)
-    use_tanh = True
-    if use_tanh:
-      return self.scaling_S * tf.nn.tanh(self.linear_s(h))
-    else:
-      return self.linear_s(h)
-
-  def T(self, x, v, t, aux=None):
-    h = self.hidden(x, v, t)
-    return self.linear_t(h)
-
-  def F(self, x, v, t, aux=None):
-    h = self.hidden(x, v, t)
-    return self.scaling_F * tf.nn.tanh(self.linear_f(h))
-
-  def __call__(self, inp):
-    x, v, t, _ = inp
-    return self.S(x, v, t), self.T(x, v, t), self.F(x, v, t)
-
 def net_factory(x_dim, scope, factor):
-  return Network(x_dim, scope=scope, factor=factor)
+    with tf.variable_scope(scope):
+        net = Sequential([
+            Zip([
+                Linear(x_dim, size1, scope='embed_1', factor=0.33),
+                Linear(x_dim, size1, scope='embed_2', factor=factor * 0.33),
+                Linear(2, size1, scope='embed_3', factor=0.33),
+                lambda _: 0.,
+            ]),
+            sum,
+            tf.nn.relu,
+            Linear(size1, size2, scope='linear_1'),
+            tf.nn.relu,
+            Parallel([
+                Sequential([
+                    Linear(size2, x_dim, scope='linear_s', factor=0.1), 
+                    ScaleTanh(x_dim, scope='scale_s')
+                ]),
+                Linear(size2, x_dim, scope='linear_t', factor=0.1),
+                Sequential([
+                    Linear(size2, x_dim, scope='linear_f', factor=0.1),
+                    ScaleTanh(x_dim, scope='scale_f'),
+                ]),
+            ]),  
+        ])
+
+        return net
 
 NET_FACTORY = net_factory
+
+# class Network(object):
+#   def __init__(self, x_dim, scope='Network', factor=1.0):
+#     with tf.variable_scope(scope):
+#       self.embed_1 = Linear(x_dim, size1, scope='embed_1', factor=1.0 / 3)
+#       self.embed_2 = Linear(x_dim, size1, scope='embed_2', factor=factor * 1.0 / 3)
+#       self.embed_3 = Linear(2, size1, scope='embed_3', factor=1.0 / 3)
+
+#       self.linear_1 = Linear(size1, size2, scope='linear_1')
+
+#       self.scaling_S = tf.exp(tf.get_variable('scale_s', shape=(1, x_dim), initializer=tf.constant_initializer(0.)))
+#       self.scaling_F = tf.exp(tf.get_variable('scale_f', shape=(1, x_dim), initializer=tf.constant_initializer(0.)))
+#       self.linear_s = Linear(size2, x_dim, scope='linear_s', factor=0.1)
+#       self.linear_t = Linear(size2, x_dim, scope='linear_t', factor=0.1)
+#       self.linear_f = Linear(size2, x_dim, scope='linear_f', factor=0.1)
+
+#   def hidden(self, x, v, t, aux=None):
+#     z1 = self.embed_1(x)
+#     z2 = self.embed_2(v)
+#     z3 = self.embed_3(t)
+
+#     h1 = tf.nn.relu(z1 + z2 + z3)
+
+#     return tf.nn.relu(self.linear_1(h1))
+
+#   def S(self, x, v, t, aux=None):
+#     h = self.hidden(x, v, t)
+#     use_tanh = True
+#     if use_tanh:
+#       return self.scaling_S * tf.nn.tanh(self.linear_s(h))
+#     else:
+#       return self.linear_s(h)
+
+#   def T(self, x, v, t, aux=None):
+#     h = self.hidden(x, v, t)
+#     return self.linear_t(h)
+
+#   def F(self, x, v, t, aux=None):
+#     h = self.hidden(x, v, t)
+#     return self.scaling_F * tf.nn.tanh(self.linear_f(h))
+
+#   def __call__(self, inp):
+#     x, v, t, _ = inp
+#     return self.S(x, v, t), self.T(x, v, t), self.F(x, v, t)
+
+# def net_factory(x_dim, scope, factor):
+#   return Network(x_dim, scope=scope, factor=factor)
+
+# NET_FACTORY = net_factory
 
 def rel_error(x_hat, x):
   error = np.abs(x_hat - x) / np.max(np.abs(x), np.abs(x_hat))
@@ -167,12 +167,13 @@ def check_moments_hmc():
 def check_radford_trajectory():
   g = Gaussian(np.zeros((2,)), np.array([[1.0, 0.95], [0.95, 1.0]]))
   
-  hmc_s = Dynamics(X_DIM, g.get_energy_function(), T=25, eps=0.25, hmc=True, eps_trainable=False)
+  hmc_s = Dynamics(X_DIM, g.get_energy_function(), T=25, eps=0.25, hmc=True, eps_trainable=False, net_factory=NET_FACTORY)
+
 
   x = tf.constant(np.array([[-1.50, -1.55]]).astype('float32'))
   v = tf.constant(np.array([[-1., 1.]]).astype('float32'))
 
-  X, V, p = hmc_s.backward(x, init_v=-v)
+  X, V, p = hmc_s.forward(x, init_v=v)
 
   expected_X = np.array([[ 0.6091, 0.0882]])
   expected_p = np.array([0.6629])
@@ -254,8 +255,6 @@ def check_forward_backward_step():
         [x, v, log_jac, log_jac2, x2, v2]
     )
     
-    print(x_[:5], x2_[:5])
-    print(np.linalg.norm(x_ - x2_))
     assert np.linalg.norm(x_ - x2_) < 1e-4
     assert np.linalg.norm(v_ - v2_) < 1e-4
     assert np.linalg.norm(log_jac_ + log_jac2_) < 1e-4
@@ -321,7 +320,6 @@ def check_jacobian():
 
   real_log_jac = np.log(np.linalg.det(M))
     
-  print(real_log_jac, code_log_jac)
   assert np.abs(real_log_jac - code_log_jac) < 1e-2
 
 def check_while_loop():
@@ -355,7 +353,6 @@ def check_while_loop():
 
     x2_ = sess.run(X2, {x: x_ini, v: v_ini})
 
-    print(x2_[0, :], x_[0, :])
     assert np.linalg.norm(x2_ - x_) < 1e-3
 
 TO_RUN = [
