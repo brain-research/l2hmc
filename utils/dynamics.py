@@ -41,16 +41,22 @@ class Dynamics(object):
     self.x_dim = x_dim
     self.use_temperature = use_temperature
     self.temperature = tf.placeholder(tf.float32, shape=())
-
-    alpha = tf.get_variable(
-        'alpha',
-        initializer=tf.log(tf.constant(eps)),
-        trainable=eps_trainable,
-    )
+    
+    if hmc:
+        alpha = tf.get_variable(
+            'alpha',
+            initializer=tf.log(tf.constant(eps)),
+            trainable=eps_trainable,
+        )
+    else:
+        alpha = tf.constant(eps, dtype=tf.float32)
 
     self.eps = safe_exp(alpha, name='alpha')
     self._fn = energy_function
+    self.T = T
 
+    self._init_mask()
+    
     m = np.zeros((x_dim,))
     m[np.arange(0, x_dim, 2)] = 1
     mb = 1 - m
@@ -61,15 +67,29 @@ class Dynamics(object):
     # if HMC we just return all zeros
     if hmc:
       z = lambda x, *args, **kwargs: tf.zeros_like(x)
-      self.Sv, self.Tv, self.Sx, self.Tx = z, z, z, z
-      self.Fv, self.Fx = z, z
+      self.XNet = lambda inp: [tf.zeros_like(inp[0]) for t in range(3)]
+      self.VNet = lambda inp: [tf.zeros_like(inp[0]) for t in range(3)]
     else:
       self.XNet = net_factory(x_dim, scope='XNet', factor=2.0)
       self.VNet = net_factory(x_dim, scope='VNet', factor=1.0)
       # self.Sv, self.Tv, self.Fv = self.VNet.S, self.VNet.T, self.VNet.F
       # self.Sx, self.Tx, self.Fx = self.XNet.S, self.XNet.T, self.XNet.F
 
-    self.T = T
+    
+  def _init_mask(self):
+    mask_per_step = []
+    
+    for t in range(self.T):
+        ind = np.random.permutation(np.arange(self.x_dim))[:int(self.x_dim / 2)]
+        m = np.zeros((self.x_dim,))
+        m[ind] = 1
+        mask_per_step.append(m)
+    
+    self.mask = tf.constant(np.stack(mask_per_step), dtype=tf.float32)
+    
+  def _get_mask(self, step):
+    m = tf.gather(self.mask, tf.cast(step, dtype=tf.int32))
+    return m, 1.-m
 
   def _format_time(self, t, tile=1):
     trig_t = tf.squeeze([
@@ -90,16 +110,19 @@ class Dynamics(object):
   def _forward_step(self, x, v, step, aux=None):
     t = self._format_time(step, tile=tf.shape(x)[0])
     
-    S1 = self.VNet([x, self.grad_energy(x, aux=aux), t, aux])
+    grad1 = self.grad_energy(x, aux=aux)
+    S1 = self.VNet([x, grad1, t, aux])
     
     sv1 = 0.5 * self.eps * S1[0]
     tv1 = S1[1]
     fv1 = self.eps * S1[2]
 
-    v_h = tf.multiply(v, safe_exp(sv1, name='sv1F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1F'), self.grad_energy(x, aux=aux)) + tv1)
+    v_h = tf.multiply(v, safe_exp(sv1, name='sv1F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1F'), grad1) + tv1)
 
-    m, mb = self.m, self.mb
-
+    m, mb = self._get_mask(step)
+    
+    # m, mb = self._gen_mask(x)
+    
     X1 = self.XNet([v_h, m * x, t, aux])
     
     sx1 = (self.eps * X1[0])
@@ -119,8 +142,9 @@ class Dynamics(object):
     sv2 = (0.5 * self.eps * S2[0])
     tv2 = S2[1]
     fv2 = self.eps * S2[2]
-
-    v_o = tf.multiply(v_h, safe_exp(sv2, name='sv2F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2F'), self.grad_energy(x_o, aux=aux)) + tv2)
+    
+    grad2 = self.grad_energy(x_o, aux=aux)
+    v_o = tf.multiply(v_h, safe_exp(sv2, name='sv2F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2F'), grad2) + tv2)
 
     log_jac_contrib = tf.reduce_sum(sv1 + sv2 + mb * sx1 + m * sx2, axis=1)
 
@@ -129,15 +153,19 @@ class Dynamics(object):
   def _backward_step(self, x_o, v_o, step, aux=None):
     t = self._format_time(step, tile=tf.shape(x_o)[0])
     
-    S1 = self.VNet([x_o, self.grad_energy(x_o, aux=aux), t, aux])
+    grad1 = self.grad_energy(x_o, aux=aux)
+    
+    S1 = self.VNet([x_o, grad1, t, aux])
     
     sv2 = (-0.5 * self.eps * S1[0])
     tv2 = S1[1]
     fv2 = self.eps * S1[2]
 
-    v_h = tf.multiply((v_o - 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2B'), self.grad_energy(x_o, aux=aux)) + tv2)), safe_exp(sv2, name='sv2B'))
+    v_h = tf.multiply((v_o - 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2B'), grad1) + tv2)), safe_exp(sv2, name='sv2B'))
 
-    m, mb = self.m, self.mb
+    m, mb = self._get_mask(step)
+    
+    # m, mb = self._gen_mask(x_o)
     
     X1 = self.XNet([v_h, mb * x_o, t, aux])
     
@@ -155,13 +183,14 @@ class Dynamics(object):
 
     x = m * y + mb * tf.multiply(safe_exp(sx1, name='sx1B'), (y - self.eps * (tf.multiply(safe_exp(fx1, name='fx1B'), v_h) + tx1)))
     
-    S2 = self.VNet([x, self.grad_energy(x, aux=aux), t, aux])
+    grad2 = self.grad_energy(x, aux=aux)
+    S2 = self.VNet([x, grad2, t, aux])
     
     sv1 = (-0.5 * self.eps * S2[0])
     tv1 = S2[1]
     fv1 = self.eps * S2[2]
 
-    v = tf.multiply(safe_exp(sv1, name='sv1B'), (v_h - 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1B'), self.grad_energy(x, aux=aux)) + tv1)))
+    v = tf.multiply(safe_exp(sv1, name='sv1B'), (v_h - 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1B'), grad2) + tv1)))
 
     return x, v, tf.reduce_sum(sv1 + sv2 + mb * sx1 + m * sx2, axis=1)
 
