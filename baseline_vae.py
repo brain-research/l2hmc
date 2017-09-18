@@ -48,14 +48,10 @@ tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
 DEFAULT_HPARAMS = tf.contrib.training.HParams(
     learning_rate=0.001,
     epoch=100,
-    leapfrogs=5,
-    MH=5,
     optimizer='adam',
     batch_size=512,
     latent_dim=50,
-    update_sampler_every=1,
-    eval_samples_every=1,
-    hmc=False
+    eval_samples_every=5,
 )
 
 OPTIMIZERS = {
@@ -73,7 +69,6 @@ def main(_):
     # hack for logdir
     hps_values = hps.values()
     del(hps_values['epoch'])
-    del(hps_values['eval_samples_every'])
 
     train_folder = string.join(
         [
@@ -83,7 +78,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/random_mask/%s' % train_folder
+    logdir = 'logs/baseline/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -127,116 +122,13 @@ def main(_):
     bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
     elbo = tf.reduce_mean(kl+bce)
     
-    # Setting up sampler
-    def energy(z, aux=None):
-        logits = decoder(z)
-        log_posterior = -tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=aux, logits=logits), axis=1)
-        log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
-        return -log_posterior - log_prior
-    
-    sampler_loss = 0.
-    
-    with tf.variable_scope('sampler'):
-        size1 = 200
-        size2 = 200
-
-        encoder_sampler = Sequential([
-            Linear(784, 512, scope='encoder_1'),
-            tf.nn.softplus,
-            Linear(512, 512, scope='encoder_2'),
-            tf.nn.softplus,
-            Linear(512, size1, scope='encoder_3'),
-        ])
-
-        def net_factory(x_dim, scope, factor):
-            with tf.variable_scope(scope):
-                net = Sequential([
-                    Zip([
-                        Linear(hps.latent_dim, size1, scope='embed_1', factor=0.33),
-                        Linear(hps.latent_dim, size1, scope='embed_2', factor=factor * 0.33),
-                        Linear(2, size1, scope='embed_3', factor=0.33),
-                        encoder_sampler,
-                    ]),
-                    sum,
-                    tf.nn.relu,
-                    Linear(size1, size2, scope='linear_1'),
-                    tf.nn.relu,
-                    Parallel([
-                        Sequential([
-                            Linear(size2, hps.latent_dim, scope='linear_s', factor=0.01), 
-                            ScaleTanh(hps.latent_dim, scope='scale_s')
-                        ]),
-                        Linear(size2, hps.latent_dim, scope='linear_t', factor=0.01),
-                        Sequential([
-                            Linear(size2, hps.latent_dim, scope='linear_f', factor=0.01),
-                            ScaleTanh(hps.latent_dim, scope='scale_f'),
-                        ])
-                    ])
-                ])
-            return net
-        
-        dynamics = Dynamics(
-            hps.latent_dim, 
-            energy, 
-            T=hps.leapfrogs, 
-            eps=0.1, 
-            hmc=hps.hmc, 
-            net_factory=net_factory, 
-            eps_trainable=True, 
-            use_temperature=False,
-        )
-        
-
-
-    latent = latent_q
-    
-    for t in range(hps.MH):
-        mask = tf.cast(tf.random_uniform((tf.shape(latent)[0], 1), maxval=2, dtype=tf.int32), tf.float32)
-
-        latent = tf.stop_gradient(latent)
-
-        Lx1, _, px1 = dynamics.forward(latent, aux=inp)
-        Lx2, _, px2 = dynamics.backward(latent, aux=inp)
-
-        Lx = mask * Lx1 + (1 - mask) * Lx2
-        px = tf.squeeze(mask, axis=1) * px1 + tf.squeeze(1 - mask, axis=1) * px2
-
-        sampler_loss += 1.0 / hps.MH * loss_func(latent, Lx, px)
-
-        latent = tf_accept(latent, Lx, px)
-
-    latent_T = latent
-    
     opt = tf.train.AdamOptimizer(hps.learning_rate)
-    
-    logits_T = decoder(tf.stop_gradient(latent_T))
 
-    log_prob = tf.reduce_mean(
-        tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits_T), axis=1),
-        axis=0
-    )
-
-    partition = tf.constant(np.sqrt((2 * np.pi) ** hps.latent_dim), dtype=tf.float32)
-    
-    log_prob += tf.reduce_mean(
-        tf.log(partition) \
-        + 0.5 * tf.reduce_sum(tf.square(tf.stop_gradient(latent_T)), axis=1),
-        axis=0
-    )
-
-    tf.summary.scalar('sampler_loss', sampler_loss)
-    tf.summary.scalar('log_prob', log_prob)
     tf.summary.scalar('elbo', elbo)
 
     loss_summaries = tf.summary.merge_all()
 
-    elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
-    
-    if hps.hmc:
-        sampler_train_op = opt.minimize(sampler_loss, var_list=var_from_scope('sampler'))
-    else:
-        sampler_train_op = tf.no_op()
-    decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
+    elbo_train_op = opt.minimize(elbo)
     
     z_eval = tf.random_normal((64, 50))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
@@ -269,22 +161,19 @@ def main(_):
             batch = x_train[start:end, :]
             
             fetches = [
-                elbo, sampler_loss, log_prob, loss_summaries, \
-                elbo_train_op, decoder_train_op
+                elbo, loss_summaries, elbo_train_op
             ]
-            
-            if t % hps.update_sampler_every == 0:
-                fetches += [sampler_train_op]
                 
             fetched = sess.run(fetches, {inp: batch})
             
             if t % 50 == 0:
-                print '%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
-                    % (t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
+                print '%d/%d::ELBO: %.2e::Time: %.2e' \
+                    % (t, batch_per_epoch, fetched[0], time.time()-time0)
                 time0 = time.time()
 
-            writer.add_summary(fetched[3], global_step=counter)
+            writer.add_summary(fetched[1], global_step=counter)
             counter += 1
+            
         if e % hps.eval_samples_every == 0:
             saver.save(sess, '%s/model.ckpt' % logdir)
             samples_summary_ = sess.run(samples_summary)

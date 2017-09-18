@@ -374,7 +374,7 @@ def check_ais():
 
   x_initial = tf.placeholder(tf.float32, shape=(None, 5))
 
-  w = ais_estimate(init_energy, final_energy, 1000, x_initial)
+  w = ais_estimate(init_energy, final_energy, 100, x_initial)
 
   log_Z = lambda sigma : 0.5 * np.log(np.linalg.det(2 * np.pi * sigma))
 
@@ -397,7 +397,7 @@ TO_RUN = [
     # (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
     # (check_moments, 'Moments are correct for our method'),
     # (check_moments_hmc, 'Moments are correct for HMC'),
-    # (check_ais, 'AIS is correct'),
+    (check_ais, 'AIS is correct'),
 ]
 
 def main(argv):
