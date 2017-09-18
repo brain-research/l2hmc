@@ -8,10 +8,11 @@ def ais_estimate(
         init_energy, 
         final_energy, 
         anneal_steps, 
-        initial_x, 
+        initial_x,
+        aux=None,
         step_size=0.5, 
         leapfrogs=25, 
-        x_dim=50
+        x_dim=5
     ):
     beta = tf.linspace(0., 1., anneal_steps+1)[1:]
     beta_diff = beta[1] - beta[0]
@@ -20,7 +21,8 @@ def ais_estimate(
         curr_energy = lambda z: (1-beta) * init_energy(z) + (beta) * final_energy(z)
         last_x = a[1]
         w = a[2]
-        w = w + beta_diff * (- final_energy(last_x) + init_energy(last_x))
+        w = w + beta_diff * (- final_energy(last_x, aux=aux) \
+            + init_energy(last_x, aux=aux))
         dynamics = Dynamics(x_dim, energy_function=curr_energy, eps=step_size, hmc=True, T=leapfrogs)
         Lx, _, px = dynamics.forward(last_x)
         updated_x = tf_accept(last_x, Lx, px)

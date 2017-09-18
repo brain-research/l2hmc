@@ -34,6 +34,7 @@ from utils.func_utils import accept, jacobian
 from utils.distributions import Gaussian
 from utils.layers import Sequential, Parallel, Zip, ScaleTanh, Linear
 from utils.dynamics import Dynamics
+from utils.ais import ais_estimate
 
 NUM_SAMPLES = 200
 X_DIM = 2
@@ -355,14 +356,48 @@ def check_while_loop():
 
     assert np.linalg.norm(x2_ - x_) < 1e-3
 
+def check_ais():
+  x_dim = 5
+
+  S1 = np.random.randn(5, 5)
+  S2 = np.random.randn(5, 5)
+
+  sigma1 = S1.dot(S1.T) + 0.1 * np.eye(5,)
+  sigma2 = S2.dot(S2.T) + 0.1 * np.eye(5,)
+
+  gaussian1 = Gaussian(np.random.randn(5,), sigma1)
+  gaussian2 = Gaussian(np.random.randn(5,), sigma2)
+
+  init_energy = gaussian1.get_energy_function()
+  final_energy = gaussian2.get_energy_function()
+
+
+  x_initial = tf.placeholder(tf.float32, shape=(None, 5))
+
+  w = ais_estimate(init_energy, final_energy, 1000, x_initial)
+
+  log_Z = lambda sigma : 0.5 * np.log(np.linalg.det(2 * np.pi * sigma))
+
+  x_initial_ = gaussian1.get_samples(200)
+
+  with tf.Session() as sess:
+    w_ = sess.run(w, {x_initial: x_initial_})
+
+  log_Z_hat = w_
+  real_log_Z = log_Z(sigma2) - log_Z(sigma1)
+
+  print(log_Z_hat, real_log_Z)
+  assert np.abs(log_Z_hat - real_log_Z) < 5e-2
+
 TO_RUN = [
-    (check_while_loop, 'forward_step composed T times is equivalent to forward'),
-    (check_jacobian, 'Log(det(jacobian)) is correct'),
-    (check_forward_backward_step, 'forward(backward(x)) = x for one step'),
-    (check_forward_backward_full, 'forward(backward(x)) = x for multiple steps'),
-    (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
-    (check_moments, 'Moments are correct for our method'),
-    (check_moments_hmc, 'Moments are correct for HMC'),
+    # (check_while_loop, 'forward_step composed T times is equivalent to forward'),
+    # (check_jacobian, 'Log(det(jacobian)) is correct'),
+    # (check_forward_backward_step, 'forward(backward(x)) = x for one step'),
+    # (check_forward_backward_full, 'forward(backward(x)) = x for multiple steps'),
+    # (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
+    # (check_moments, 'Moments are correct for our method'),
+    # (check_moments_hmc, 'Moments are correct for HMC'),
+    (check_ais, 'AIS is correct'),
 ]
 
 def main(argv):

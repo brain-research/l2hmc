@@ -39,7 +39,7 @@ class Gaussian(object):
     self.i_sigma = np.linalg.inv(sigma)
 
   def get_energy_function(self):
-    def fn(x):
+    def fn(x, *args, **kwargs):
       S = tf.constant(self.i_sigma.astype('float32'))
       mu = tf.constant(self.mu.astype('float32'))
 
