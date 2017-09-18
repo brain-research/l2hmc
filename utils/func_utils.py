@@ -25,6 +25,8 @@ import tensorflow as tf
 import numpy as np
 from scipy.stats import multivariate_normal
 
+from tensorflow.examples.tutorials.mnist import input_data
+
 def prout():
   return 3
 

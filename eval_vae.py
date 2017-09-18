@@ -6,7 +6,7 @@ import numpy as np
 from utils.layers import Sequential, Linear
 from utils.distributions import Gaussian
 from utils.ais import ais_estimate
-from utils.func_utils import get_data, binarize,
+from utils.func_utils import get_data, binarize
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -24,7 +24,7 @@ with tf.variable_scope('decoder'):
     ])
 
 inp = tf.placeholder(tf.float32, shape=(None, 784))
-z = tf.random_normal(tf.shape(inp))
+z = tf.random_normal((tf.shape(inp)[0], 50))
 
 gaussian = Gaussian(np.zeros((50,)), np.eye(50))
 init_energy = gaussian.get_energy_function()
@@ -35,7 +35,7 @@ def final_energy(z, aux=None):
     log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
     return -log_posterior - log_prior
 
-p_x_hat = ais_estimate(init_energy, final_energy, 1000, z, aux=inp)
+p_x_hat = ais_estimate(init_energy, final_energy, 1000, z, x_dim=50, aux=inp, leapfrogs=10, step_size=0.1, num_splits=50)
 
 saver = tf.train.Saver()
 
@@ -49,14 +49,22 @@ with tf.Session() as sess:
 
 	est_log_p = 0.
 	time0 = time.time()
-	for i in range(N):
-		if i % 100 == 0:
-			print '%d / %d in %.2e seconds' % (i, N, time.time() - time0)
+    
+	num_splits = 50
+    
+	for i in xrange(0, N, num_splits):
+		ais_batch = x_test[i:i+num_splits]
+		print ais_batch.shape
+		ais_batch = ais_batch[:, np.newaxis, :] + np.zeros([1, 20, 1]).astype('float32')
+		ais_batch = np.reshape(ais_batch, [-1, 784])
+		print ais_batch.shape
+		if i > 0:
+			print '%d / %d in %.2e seconds, est=%.2f' % (i, N, time.time() - time0, est_log_p / i)
 			time0 = time.time()
 
 		single = x_test[i, :]
 		tiled = np.tile(single, (20, 1))
 
-		est_log_p += sess.run(p_x_hat, {inp: tiled})
+		est_log_p += sess.run(p_x_hat, {inp: ais_batch})
 
 	print(est_log_p)
