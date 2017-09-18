@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
-from utils import tf_accept
+from dynamics import Dynamics
+from func_utils import tf_accept
 
 def ais_estimate(
         init_energy, 
@@ -28,4 +29,4 @@ def ais_estimate(
     alpha, x, w = tf.scan(body, beta, (tf.zeros_like(initial_x[:, 0]),
                         initial_x, tf.zeros_like(initial_x[:, 0])))
     
-    return tf.reduce_logsumexp(w[-1]) - tf.log(tf.shape(initial_x)[0])
+    return tf.reduce_logsumexp(w[-1]) - tf.log(tf.cast(tf.shape(initial_x)[0], tf.float32))

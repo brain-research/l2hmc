@@ -78,6 +78,10 @@ def binarize(x):
   assert(x.max() <= 1.)
   return (np.random.random(x.shape) < x).astype(np.float32)
 
+def tf_accept(x, Lx, px):
+    mask = (px - tf.random_uniform(tf.shape(px)) >= 0.)
+    return tf.where(mask, Lx, x)
+
 def normal_kl(q_means, q_stddevs, p_means, p_stddevs):
   '''Returns the KL divergence between two normal distributions q and p.
   
