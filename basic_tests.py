@@ -374,15 +374,16 @@ def check_ais():
 
   x_initial = tf.placeholder(tf.float32, shape=(None, 5))
 
-  w = ais_estimate(init_energy, final_energy, 1000, x_initial)
+  w = ais_estimate(init_energy, final_energy, 25000, x_initial, leapfrogs=1, step_size=0.1)
 
   log_Z = lambda sigma : 0.5 * np.log(np.linalg.det(2 * np.pi * sigma))
 
   x_initial_ = gaussian1.get_samples(200)
 
   with tf.Session() as sess:
-    w_ = sess.run(w, {x_initial: x_initial_})
-
+    w_, p_ = sess.run(w, {x_initial: x_initial_})
+    
+  print(p_)
   log_Z_hat = w_
   real_log_Z = log_Z(sigma2) - log_Z(sigma1)
 

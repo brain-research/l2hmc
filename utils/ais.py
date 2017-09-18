@@ -17,7 +17,7 @@ def ais_estimate(
     ):
     beta = tf.linspace(0., 1., anneal_steps+1)[1:]
     beta_diff = beta[1] - beta[0]
-    refreshment = tf.constant(0.3)
+    refreshment = tf.constant(0.1)
     def body(a, beta):
         def curr_energy(z, aux=None): 
             return (1-beta) * init_energy(z) + (beta) * final_energy(z, aux=aux)
@@ -49,7 +49,7 @@ def ais_estimate(
     logmeanexp = lambda z: tf.reduce_logsumexp(z) - tf.log(tf.cast(tf.shape(z)[0], tf.float32))
     
     if num_splits == 1:
-        return logmeanexp(w[-1])
+        return logmeanexp(w[-1]), tf.reduce_mean(alpha)
     
     list_w = tf.split(w[-1], num_splits, axis=0)
-    return tf.reduce_sum(tf.stack(map(logmeanexp, list_w), axis=0), 0)
+    return tf.reduce_sum(tf.stack(map(logmeanexp, list_w), axis=0), 0), tf.reduce_mean(alpha)
