@@ -83,7 +83,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/random_mask/%s' % train_folder
+    logdir = 'logs/hmc/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -114,13 +114,17 @@ def main(_):
     # Setting up the VAE
     
     inp = tf.placeholder(tf.float32, shape=(None, 784))
-
+    
+    tf.add_to_collection('inp', inp)
+    
     mu, log_sigma = encoder(inp)
 
     noise = tf.random_normal(tf.shape(mu))
 
     latent_q = mu + noise * tf.exp(log_sigma)
-
+    
+    tf.add_to_collection('latent_q', latent_q)
+    
     logits = decoder(latent_q)
 
     kl = normal_kl(mu, tf.exp(log_sigma), 0., 1.)
@@ -207,10 +211,14 @@ def main(_):
 
     latent_T = latent
     
+    tf.add_to_collection('latent_T', latent_T)
+    
     opt = tf.train.AdamOptimizer(hps.learning_rate)
     
     logits_T = decoder(tf.stop_gradient(latent_T))
-
+    
+    tf.add_to_collection('logits_T', logits_T)
+    
     log_prob = tf.reduce_mean(
         tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits_T), axis=1),
         axis=0
@@ -232,15 +240,18 @@ def main(_):
 
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     
-    if hps.hmc:
+    if not hps.hmc:
         sampler_train_op = opt.minimize(sampler_loss, var_list=var_from_scope('sampler'))
     else:
         sampler_train_op = tf.no_op()
     decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
     
-    z_eval = tf.random_normal((64, 50))
+    z_eval = tf.placeholder(tf.float32, shape=(None, 50))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
-
+    
+    tf.add_to_collection('z_eval', z_eval)
+    tf.add_to_collection('x_eval', x_eval)
+    
     samples_summary = tf.summary.image(
         'samples',
         tf.reshape(x_eval, (-1, 28, 28, 1)),
@@ -287,7 +298,7 @@ def main(_):
             counter += 1
         if e % hps.eval_samples_every == 0:
             saver.save(sess, '%s/model.ckpt' % logdir)
-            samples_summary_ = sess.run(samples_summary)
+            samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
 if __name__ == '__main__':

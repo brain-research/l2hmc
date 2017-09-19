@@ -14,18 +14,22 @@ def ais_estimate(
         leapfrogs=25, 
         x_dim=5,
         num_splits=1,
+        refresh=False,
+        refreshment=0.1
     ):
     beta = tf.linspace(0., 1., anneal_steps+1)[1:]
     beta_diff = beta[1] - beta[0]
-    refreshment = tf.constant(0.1)
+    refreshment = tf.constant(refreshment)
     def body(a, beta):
         def curr_energy(z, aux=None): 
             return (1-beta) * init_energy(z) + (beta) * final_energy(z, aux=aux)
         last_x = a[1]
         w = a[2]
         v = a[3]
-        refreshed_v = v * tf.sqrt(1-refreshment) + tf.random_normal(tf.shape(v)) * tf.sqrt(refreshment)
-        #refreshed_v = tf.random_normal(tf.shape(v))
+        if refresh:
+            refreshed_v = v * tf.sqrt(1-refreshment) + tf.random_normal(tf.shape(v)) * tf.sqrt(refreshment)
+        else:
+            refreshed_v = tf.random_normal(tf.shape(v))
         w = w + beta_diff * (- final_energy(last_x, aux=aux) \
             + init_energy(last_x, aux=aux))
         dynamics = Dynamics(x_dim, energy_function=curr_energy, eps=step_size, hmc=True, T=leapfrogs)

@@ -12,9 +12,9 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str)
-# parser.add_argument('--leapfrogs', 10, type=int)
-# parser.add_argument('--anneal_steps', 100, type=int)
-# parser.add_argument('--split', 'test', type=str)
+parser.add_argument('--leapfrogs', default=10, type=int)
+parser.add_argument('--anneal_steps', default=100, type=int)
+parser.add_argument('--split', default='test', type=str)
 args = parser.parse_args()
 
 with tf.variable_scope('decoder'):
@@ -38,7 +38,7 @@ def final_energy(z, aux=None):
     log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
     return -log_posterior - log_prior
 
-p_x_hat = ais_estimate(init_energy, final_energy, 100, z, x_dim=50, aux=inp, leapfrogs=2, step_size=0.1, num_splits=50)
+p_x_hat = ais_estimate(init_energy, final_energy, 1000, z, x_dim=50, aux=inp, leapfrogs=5, step_size=0.1, num_splits=50,) #refresh=True, refreshment=0.1)
 
 saver = tf.train.Saver()
 
@@ -46,8 +46,8 @@ with tf.Session() as sess:
 	saver.restore(save_path=args.path, sess=sess)
 
 	_, float_x_test = get_data()
-	x_test = binarize(float_x_test)
-
+	# x_test = binarize(float_x_test)
+	x_test = np.load('train_small.npy')
 	N = x_test.shape[0]
 
 	est_log_p = 0.
@@ -63,11 +63,13 @@ with tf.Session() as sess:
 		print ais_batch.shape
 		if i > 0:
 			print '%d / %d in %.2e seconds, est=%.2f' % (i, N, time.time() - time0, est_log_p / i)
+			print fetched[0]
 			time0 = time.time()
 
 		single = x_test[i, :]
 		tiled = np.tile(single, (20, 1))
-
-		est_log_p += sess.run(p_x_hat, {inp: ais_batch})
+        
+		fetched = sess.run(p_x_hat, {inp: ais_batch})
+		est_log_p += fetched[0]
 
 	print(est_log_p)
