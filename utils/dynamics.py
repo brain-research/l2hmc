@@ -54,6 +54,7 @@ class Dynamics(object):
     self.eps = safe_exp(alpha, name='alpha')
     self._fn = energy_function
     self.T = T
+    self.hmc = hmc
 
     self._init_mask()
     

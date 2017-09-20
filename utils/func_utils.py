@@ -111,12 +111,12 @@ def binarize_and_shuffle(x):
   Args:
     'x': numpy array
   '''
-    N = x.shape[0]
+  N = x.shape[0]
 
-    float_x_train = x[np.random.permutation(N), :]
+  float_x_train = x[np.random.permutation(N), :]
 
-    x_train = binarize(float_x_train)
-    return x_train
+  x_train = binarize(float_x_train)
+  return x_train
 
 def var_from_scope(scope_name):
     return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope_name)

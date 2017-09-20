@@ -2,7 +2,6 @@ import time, sys, string
 
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 
 from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihood, get_data,\
     var_from_scope, binarize, normal_kl, binarize_and_shuffle
@@ -14,7 +13,7 @@ from utils.losses import get_loss
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
-tf.app.flags.DEFINE_string('exp_id', '')
+tf.app.flags.DEFINE_string('exp_id', '', 'exp_id')
 
 DEFAULT_HPARAMS = tf.contrib.training.HParams(
     learning_rate=0.001,
@@ -159,7 +158,7 @@ def main(_):
     for t in range(hps.MH):
         latent = tf.stop_gradient(latent)
         Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
-        sampler_loss += 1.0 / hps.MH * loss_func(latent, Lx, px)
+        sampler_loss += 1.0 / hps.MH * get_loss(LOSS)(latent, Lx, px)
         latent = MH[0]
 
     latent_T = latent
@@ -204,7 +203,7 @@ def main(_):
 
     global_step = tf.Variable(0., trainable=False)
     learning_rate = tf.train.exponential_decay(
-        hps.learning_rate, 
+        0.5 * hps.learning_rate, 
         global_step,
         750,
         0.96, 
@@ -213,12 +212,12 @@ def main(_):
 
     opt_sampler = tf.train.AdamOptimizer(learning_rate)
 
-    elbo_train_op = [opt.minimize(elbo, var_list=var_from_scope('encoder')), incr_step]
+    elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     if not hps.hmc:
         sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
     else:
         sampler_train_op = tf.no_op()
-    decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
+    decoder_train_op = opt.minimize(likelihood, var_list=var_from_scope('decoder'))
 
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
@@ -247,8 +246,8 @@ def main(_):
             batch = x_train[start:end, :]
             
             fetches = [
-                elbo, sampler_loss, log_prob, loss_summaries, \
-                elbo_train_op, decoder_train_op
+                elbo, sampler_loss, likelihood, loss_summaries, \
+                global_step, elbo_train_op, decoder_train_op
             ]
             
             if t % hps.update_sampler_every == 0:
@@ -258,7 +257,7 @@ def main(_):
             
             if t % 50 == 0:
                 print 'Step:%d::%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
-                    % (t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
+                    % (fetched[4], t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
                 time0 = time.time()
 
             writer.add_summary(fetched[3], global_step=counter)
