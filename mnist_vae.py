@@ -1,4 +1,4 @@
-import time, sys, string
+import time, sys, string, os
 
 import tensorflow as tf
 import numpy as np
@@ -266,6 +266,14 @@ def main(_):
             saver.save(sess, '%s/model.ckpt' % logdir)
             samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
+
+    cmd = 'python eval_vae.py --path "%s/" --split %s'
+
+    print 'Train fold evaluation'
+    os.system(cmd % (logdir, 'train'))
+
+    print 'Test fold evaluation'
+    os.system(cmd % (logdir, 'test'))
 
 if __name__ == '__main__':
     tf.app.run(main)
