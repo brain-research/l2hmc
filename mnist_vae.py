@@ -4,46 +4,17 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihood, get_data, binarize, normal_kl
+from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihood, get_data,\
+    var_from_scope, binarize, normal_kl, binarize_and_shuffle
 from utils.distributions import Gaussian, GMM, GaussianFunnel, gen_ring
 from utils.layers import Linear, Parallel, Sequential, Zip, ScaleTanh
 from utils.dynamics import Dynamics
-
-from tensorflow.examples.tutorials.mnist import input_data
-
-def get_data():
-    mnist = input_data.read_data_sets("MNIST_data/", validation_size=0)
-    train_data = mnist.train.next_batch(60000, shuffle=False)[0]
-    test_data = mnist.test.next_batch(10000, shuffle=False)[0]
-    return train_data, test_data
-
-def binarize_and_shuffle(x):
-    N = x.shape[0]
-
-    float_x_train = x[np.random.permutation(N), :]
-
-    x_train = binarize(float_x_train)
-    return x_train
-
-def var_from_scope(scope_name):
-    return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope_name)
-
-def loss_func(x, Lx, px):
-    v1 = tf.reduce_sum(tf.square(x - Lx), axis=1) * px + 1e-4
-    scale = 1.0
-
-    sampler_loss = 0.
-    sampler_loss += scale * (tf.reduce_mean(1.0 / v1))
-    sampler_loss += (- tf.reduce_mean(v1)) / scale
-    return sampler_loss
-
-def tf_accept(x, Lx, px):
-    mask = (px - tf.random_uniform(tf.shape(px)) >= 0.)
-    return tf.where(mask, Lx, x)
+from utils.sampler import propose
+from utils.losses import get_loss
 
 FLAGS = tf.app.flags.FLAGS
-
 tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
+tf.app.flags.DEFINE_string('exp_id', '')
 
 DEFAULT_HPARAMS = tf.contrib.training.HParams(
     learning_rate=0.001,
@@ -57,6 +28,9 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     eval_samples_every=1,
     hmc=False
 )
+
+# hardcode the loss
+LOSS = 'mixed'
 
 OPTIMIZERS = {
     'adam': tf.train.AdamOptimizer,
@@ -113,23 +87,11 @@ def main(_):
     
     # Setting up the VAE
     
-    inp = tf.placeholder(tf.float32, shape=(None, 784))
-    
-    tf.add_to_collection('inp', inp)
-    
+    inp = tf.placeholder(tf.float32, shape=(None, 784))    
     mu, log_sigma = encoder(inp)
-
     noise = tf.random_normal(tf.shape(mu))
-
     latent_q = mu + noise * tf.exp(log_sigma)
-    
-    tf.add_to_collection('latent_q', latent_q)
-    
     logits = decoder(latent_q)
-
-    kl = normal_kl(mu, tf.exp(log_sigma), 0., 1.)
-    bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
-    elbo = tf.reduce_mean(kl+bce)
     
     # Setting up sampler
     def energy(z, aux=None):
@@ -195,73 +157,69 @@ def main(_):
     latent = latent_q
     
     for t in range(hps.MH):
-        mask = tf.cast(tf.random_uniform((tf.shape(latent)[0], 1), maxval=2, dtype=tf.int32), tf.float32)
-
         latent = tf.stop_gradient(latent)
-
-        Lx1, _, px1 = dynamics.forward(latent, aux=inp)
-        Lx2, _, px2 = dynamics.backward(latent, aux=inp)
-
-        Lx = mask * Lx1 + (1 - mask) * Lx2
-        px = tf.squeeze(mask, axis=1) * px1 + tf.squeeze(1 - mask, axis=1) * px2
-
+        Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
         sampler_loss += 1.0 / hps.MH * loss_func(latent, Lx, px)
-
-        latent = tf_accept(latent, Lx, px)
+        latent = MH[0]
 
     latent_T = latent
     
-    tf.add_to_collection('latent_T', latent_T)
+
     
     opt = tf.train.AdamOptimizer(hps.learning_rate)
     
     logits_T = decoder(tf.stop_gradient(latent_T))
-    
-    tf.add_to_collection('logits_T', logits_T)
-    
-    log_prob = tf.reduce_mean(
-        tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits_T), axis=1),
-        axis=0
-    )
-
     partition = tf.constant(np.sqrt((2 * np.pi) ** hps.latent_dim), dtype=tf.float32)
-    
-    log_prob += tf.reduce_mean(
-        tf.log(partition) \
-        + 0.5 * tf.reduce_sum(tf.square(tf.stop_gradient(latent_T)), axis=1),
-        axis=0
-    )
+    prior_probs = tf.log(partition) + \
+        0.5 * tf.reduce_sum(tf.square(tf.stop_gradient(latent_T)), axis=1)
+    posterior_probs = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits_T), axis=1)
+
+    likelihood = tf.reduce_mean(prior_probs+posterior_probs, axis=0)
+
+    kl = normal_kl(mu, tf.exp(log_sigma), 0., 1.)
+    bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
+    elbo = tf.reduce_mean(kl+bce)
 
     tf.summary.scalar('sampler_loss', sampler_loss)
-    tf.summary.scalar('log_prob', log_prob)
+    tf.summary.scalar('log_prob', likelihood)
     tf.summary.scalar('elbo', elbo)
-
     loss_summaries = tf.summary.merge_all()
 
-    elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
+
     
-    if not hps.hmc:
-        sampler_train_op = opt.minimize(sampler_loss, var_list=var_from_scope('sampler'))
-    else:
-        sampler_train_op = tf.no_op()
-    decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
-    
+    # For sample generation
     z_eval = tf.placeholder(tf.float32, shape=(None, 50))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
-    
-    tf.add_to_collection('z_eval', z_eval)
-    tf.add_to_collection('x_eval', x_eval)
-    
+
     samples_summary = tf.summary.image(
         'samples',
         tf.reshape(x_eval, (-1, 28, 28, 1)),
         64,
     )
 
-    time0 = time.time()
     
     batch_per_epoch = N / hps.batch_size
-    
+
+    # Setting up train ops
+
+    global_step = tf.Variable(0., trainable=False)
+    learning_rate = tf.train.exponential_decay(
+        hps.learning_rate, 
+        global_step,
+        750,
+        0.96, 
+        staircase=True
+    )
+
+    opt_sampler = tf.train.AdamOptimizer(learning_rate)
+
+    elbo_train_op = [opt.minimize(elbo, var_list=var_from_scope('encoder')), incr_step]
+    if not hps.hmc:
+        sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
+    else:
+        sampler_train_op = tf.no_op()
+    decoder_train_op = opt.minimize(log_prob, var_list=var_from_scope('decoder'))
+
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
 
@@ -270,6 +228,15 @@ def main(_):
     
     counter = 0
 
+    # For graph restore
+    tf.add_to_collection('inp', inp)
+    tf.add_to_collection('latent_q', latent_q)
+    tf.add_to_collection('latent_T', latent_T)
+    tf.add_to_collection('logits_T', logits_T)
+    tf.add_to_collection('z_eval', z_eval)
+    tf.add_to_collection('x_eval', x_eval)
+
+    time0 = time.time()
     for e in range(hps.epoch):
         x_train = binarize_and_shuffle(float_x_train)
         
@@ -290,7 +257,7 @@ def main(_):
             fetched = sess.run(fetches, {inp: batch})
             
             if t % 50 == 0:
-                print '%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
+                print 'Step:%d::%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
                     % (t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
                 time0 = time.time()
 

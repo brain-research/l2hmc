@@ -15,11 +15,12 @@ parser.add_argument('--path', type=str)
 parser.add_argument('--leapfrogs', default=10, type=int)
 parser.add_argument('--anneal_steps', default=100, type=int)
 parser.add_argument('--split', default='test', type=str)
+parser.add_argument('--latent_dim', default=50, type=int)
 args = parser.parse_args()
 
 with tf.variable_scope('decoder'):
     decoder = Sequential([
-        Linear(50, 1024, scope='decoder_1'),
+        Linear(args.latent_dim, 1024, scope='decoder_1'),
         tf.nn.softplus,
         Linear(1024, 1024, scope='decoder_2'),
         tf.nn.softplus,
@@ -27,9 +28,9 @@ with tf.variable_scope('decoder'):
     ])
 
 inp = tf.placeholder(tf.float32, shape=(None, 784))
-z = tf.random_normal((tf.shape(inp)[0], 50))
+z = tf.random_normal((tf.shape(inp)[0], args.latent_dim))
 
-gaussian = Gaussian(np.zeros((50,)), np.eye(50))
+gaussian = Gaussian(np.zeros((args.latent_dim,)), np.eye(args.latent_dim))
 init_energy = gaussian.get_energy_function()
 
 def final_energy(z, aux=None):
@@ -38,16 +39,16 @@ def final_energy(z, aux=None):
     log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
     return -log_posterior - log_prior
 
-p_x_hat = ais_estimate(init_energy, final_energy, 1000, z, x_dim=50, aux=inp, leapfrogs=5, step_size=0.1, num_splits=50,) #refresh=True, refreshment=0.1)
+p_x_hat = ais_estimate(init_energy, final_energy, 1000, z, x_dim=args.latent_dim, aux=inp, leapfrogs=5, step_size=0.1, num_splits=50,) #refresh=True, refreshment=0.1)
 
 saver = tf.train.Saver()
 
 with tf.Session() as sess:
-	saver.restore(save_path=args.path, sess=sess)
+	saver.restore(save_path=args.path+'model.ckpt', sess=sess)
 
 	_, float_x_test = get_data()
 	# x_test = binarize(float_x_test)
-	x_test = np.load('train_small.npy')
+	x_test = np.load(args.fold+'_small.npy')
 	N = x_test.shape[0]
 
 	est_log_p = 0.
@@ -72,4 +73,7 @@ with tf.Session() as sess:
 		fetched = sess.run(p_x_hat, {inp: ais_batch})
 		est_log_p += fetched[0]
 
-	print(est_log_p)
+	print(est_log_p / N)
+
+	with open(path+args.fold+'_ll.txt', 'w') as f:
+		f.write(est_log_p / N)
