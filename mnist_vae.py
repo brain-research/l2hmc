@@ -9,7 +9,7 @@ from utils.distributions import Gaussian, GMM, GaussianFunnel, gen_ring
 from utils.layers import Linear, Parallel, Sequential, Zip, ScaleTanh
 from utils.dynamics import Dynamics
 from utils.sampler import propose
-from utils.losses import get_loss
+from utils.losses import get_loss, loss_mixed
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/hmc/%s' % train_folder
+    logdir = 'logs/09-22/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -155,15 +155,27 @@ def main(_):
 
     latent = latent_q
     
+    inverse_term = 0.
+    other_term = 0.
+    
     for t in range(hps.MH):
         latent = tf.stop_gradient(latent)
         Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
-        sampler_loss += 1.0 / hps.MH * get_loss(LOSS)(latent, Lx, px)
+        v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
+        
+        v = tf.reduce_sum(v, 1) * px + 1e-4
+        
+        inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
+        other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+        
+        #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
         latent = MH[0]
-
+        
+    
     latent_T = latent
     
 
+    sampler_loss = inverse_term + other_term
     
     opt = tf.train.AdamOptimizer(hps.learning_rate)
     
@@ -178,7 +190,9 @@ def main(_):
     kl = normal_kl(mu, tf.exp(log_sigma), 0., 1.)
     bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
     elbo = tf.reduce_mean(kl+bce)
-
+    
+    tf.summary.scalar('inverse_term', inverse_term)
+    tf.summary.scalar('other_term', other_term)
     tf.summary.scalar('sampler_loss', sampler_loss)
     tf.summary.scalar('log_prob', likelihood)
     tf.summary.scalar('elbo', elbo)
@@ -203,7 +217,7 @@ def main(_):
 
     global_step = tf.Variable(0., trainable=False)
     learning_rate = tf.train.exponential_decay(
-        0.5 * hps.learning_rate, 
+        hps.learning_rate, 
         global_step,
         750,
         0.96, 

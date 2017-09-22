@@ -30,7 +30,8 @@ def loss_std(x, X, p):
 
 def loss_mixed(x, Lx, px, scale=1.0):
   v1 = loss_vec(x, Lx, px)
+  v1 /= scale
   sampler_loss = 0.
-  sampler_loss += scale * (tf.reduce_mean(1.0 / v1))
-  sampler_loss += (- tf.reduce_mean(v1)) / scale
+  sampler_loss += (tf.reduce_mean(1.0 / v1))
+  sampler_loss += (- tf.reduce_mean(v1))
   return sampler_loss

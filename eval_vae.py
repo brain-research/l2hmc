@@ -75,5 +75,5 @@ with tf.Session() as sess:
 
 	print(est_log_p / N)
 
-	with open(path+args.split+'_ll.txt', 'w') as f:
-		f.write(est_log_p / N)
+	with open(args.path+args.split+'_ll.txt', 'w') as f:
+		f.write(str(est_log_p / N))
