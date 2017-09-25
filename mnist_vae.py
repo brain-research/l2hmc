@@ -97,7 +97,7 @@ def main(_):
         logits = decoder(z)
         log_posterior = -tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=aux, logits=logits), axis=1)
         log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
-        return -log_posterior - log_prior
+        return tf.stop_gradient(-log_posterior - log_prior)
     
     sampler_loss = 0.
     
@@ -216,15 +216,15 @@ def main(_):
     # Setting up train ops
 
     global_step = tf.Variable(0., trainable=False)
-    learning_rate = tf.train.exponential_decay(
-        hps.learning_rate, 
-        global_step,
-        750,
-        0.96, 
-        staircase=True
-    )
+    # learning_rate = tf.train.exponential_decay(
+    #     hps.learning_rate, 
+    #     global_step,
+    #     750,
+    #     0.96, 
+    #     staircase=True
+    # )
 
-    opt_sampler = tf.train.AdamOptimizer(learning_rate)
+    opt_sampler = tf.train.AdamOptimizer(hps.learning_rate)
 
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     if not hps.hmc:
@@ -281,7 +281,7 @@ def main(_):
             samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
-    cmd = 'python eval_vae.py --path "%s/" --split %s'
+    cmd = 'python eval_vae.py --path "%s/" --split %s --anneal_steps 5000'
 
     print 'Train fold evaluation'
     os.system(cmd % (logdir, 'train'))
