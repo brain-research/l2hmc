@@ -108,8 +108,8 @@ class GMM(object):
 class GaussianFunnel(object):
   def __init__(self, dim=2, clip=6.):
     self.dim = dim
-    self.sigma = 3.0
-    self.clip = clip
+    self.sigma = 2.0
+    self.clip = 4 * self.sigma
 
   def get_energy_function(self):
     print('getting energy fn')
@@ -126,10 +126,10 @@ class GaussianFunnel(object):
       E_safe2 = 0.5 * (log_p_v + sum_sq / s_min + n * tf.log(2.0 * np.pi * s_min))
       E_safe = tf.minimum(E_safe1, E_safe2)
 
-      E_ = tf.where(tf.greater(v, 12.), E_safe1, E)
-      E_ = tf.where(tf.greater(-12., v), E_safe2, E_)
+      E_ = tf.where(tf.greater(v, self.clip), E_safe1, E)
+      E_ = tf.where(tf.greater(-self.clip, v), E_safe2, E_)
 
-      return E_
+      return E
     return fn
 
   def get_samples(self, n):
