@@ -2,6 +2,8 @@ import argparse
 
 import tensorflow as tf
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from utils.layers import Sequential, Zip, Parallel, Linear, ScaleTanh
@@ -19,7 +21,7 @@ args = parser.parse_args()
 
 # First load the graph and grab the mask
 
-logdir = 'logs/%s/optimizer=adam,learning_rate=0.001,latent_dim=%d,MH=%d,batch_size=512,update_sampler_every=1,leapfrogs=%d,hmc=False/' \
+logdir = 'logs/%s/optimizer=adam,learning_rate=0.001,latent_dim=%d,MH=%d,batch_size=512,update_sampler_every=1,leapfrogs=%d,hmc=False' \
 	% (args.exp_id, args.latent_dim, args.MH, args.leapfrogs)
 path = '%s/model.ckpt' % logdir
 

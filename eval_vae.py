@@ -72,7 +72,7 @@ with tf.Session() as sess:
 
 		fetched = sess.run(p_x_hat, {inp: ais_batch})
 		est_log_p += fetched[0]
-
+		print fetched[1]
 	print(est_log_p / N)
 
 	with open(args.path+args.split+'_ll.txt', 'w') as f:
