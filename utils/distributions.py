@@ -31,7 +31,6 @@ from scipy.stats import multivariate_normal
 def quadratic_gaussian(x, mu, S):
   return tf.diag_part(0.5 * tf.matmul(tf.matmul(x - mu, S), tf.transpose(x - mu)))
 
-
 class Gaussian(object):
   def __init__(self, mu, sigma):
     self.mu = mu
@@ -52,6 +51,22 @@ class Gaussian(object):
 
   def log_density(self, X):
     return multivariate_normal(mean=self.mu, cov=self.sigma).logpdf(X)
+
+
+class RoughWell(object):
+  def __init__(self, dim, eps):
+    self.dim = dim
+    self.eps = eps
+
+  def get_energy_function(self):
+    def fn(x, *args, **kwargs):
+      n = tf.reduce_sum(tf.square(x), 1)
+      return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(n / (self.eps * self.eps)), 1)
+    return fn
+
+  def get_samples(self, n):
+    # we can approximate by a gaussian for eps small enough
+    return np.random.randn(n, self.dim)
 
 
 class GMM(object):

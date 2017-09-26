@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-24/%s' % train_folder
+    logdir = 'logs/09-26/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -158,6 +158,8 @@ def main(_):
     inverse_term = 0.
     other_term = 0.
     
+    only_two = True
+
     for t in range(hps.MH):
         latent = tf.stop_gradient(latent)
         Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
@@ -165,8 +167,13 @@ def main(_):
         
         v = tf.reduce_sum(v, 1) * px + 1e-4
         
-        inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
-        other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+        if only_two:
+            if t < 2:
+                inverse_term += 0.5 * tf.reduce_mean(1.0 / v)
+                other_term -= 0.5 * tf.reduce_mean(v)
+        else:
+            inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
+            other_term += -1.0 / hps.MH * tf.reduce_mean(v)
         
         #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
         latent = MH[0]
