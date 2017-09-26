@@ -41,18 +41,30 @@ def accept(x_i, x_p, p):
 
   return x_i * (1 - m) + x_p * m
 
-def autocovariance(X, tau=1):
-  """
-  """
 
-  dT, dN, dX = X.shape
+def autocovariance(X, tau=0):
+  dT, dN, dX = np.shape(X)
+  s = 0.
+  for t in range(dT - tau):
+    x1 = X[t, :, :]
+    x2 = X[t+tau, :, :]
 
-  Xf = np.fft(X, axis=0)
-  Cf = Xf * np.conj(Xf)
-  C = np.ifft(Cf)
-  auto = np.mean(C, axis=[1,2])
+    s += np.sum(x1 * x2) / dN
 
-  return auto
+  return s / (dT - tau)
+  
+# def autocovariance(X, tau=1):
+#   """
+#   """
+
+#   dT, dN, dX = X.shape
+
+#   Xf = np.fft(X, axis=0)
+#   Cf = Xf * np.conj(Xf)
+#   C = np.ifft(Cf)
+#   auto = np.mean(C, axis=[1,2])
+
+#   return auto
 
 #   for t in range(dT - tau):
 #     x1 = X[t, :, :]
