@@ -129,7 +129,7 @@ class GaussianFunnel(object):
       E_ = tf.where(tf.greater(v, self.clip), E_safe1, E)
       E_ = tf.where(tf.greater(-self.clip, v), E_safe2, E_)
 
-      return E
+      return E_
     return fn
 
   def get_samples(self, n):

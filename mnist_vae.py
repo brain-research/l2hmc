@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-22/%s' % train_folder
+    logdir = 'logs/09-24/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -97,8 +97,8 @@ def main(_):
         logits = decoder(z)
         log_posterior = -tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=aux, logits=logits), axis=1)
         log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
-        return tf.stop_gradient(-log_posterior - log_prior)
-    
+        return (-log_posterior - log_prior)
+    energy_stop_grad = lambda z, aux=None: energy(tf.stop_gradient(z), aux=None)
     sampler_loss = 0.
     
     with tf.variable_scope('sampler'):

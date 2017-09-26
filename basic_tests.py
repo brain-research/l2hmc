@@ -34,6 +34,7 @@ from utils.func_utils import accept, jacobian
 from utils.distributions import Gaussian
 from utils.layers import Sequential, Parallel, Zip, ScaleTanh, Linear
 from utils.dynamics import Dynamics
+from utils.sampler import propose
 from utils.ais import ais_estimate
 
 NUM_SAMPLES = 200
@@ -174,7 +175,7 @@ def check_radford_trajectory():
   x = tf.constant(np.array([[-1.50, -1.55]]).astype('float32'))
   v = tf.constant(np.array([[-1., 1.]]).astype('float32'))
 
-  X, V, p = hmc_s.forward(x, init_v=v)
+  X, V, p, _ = propose(x, hmc_s, init_v=v, do_mh_step=False)
 
   expected_X = np.array([[ 0.6091, 0.0882]])
   expected_p = np.array([0.6629])
@@ -197,15 +198,8 @@ def check_moments():
       net_factory=NET_FACTORY
   )
 
-  F = tf.placeholder(tf.float32, shape=(None, 2))
-  B = tf.placeholder(tf.float32, shape=(None, 2))
-
-  F_p, _, p_f = sampler.forward(F)
-  B_p, _, p_b = sampler.backward(B)
-
-  init_samples = tf.concat([F, B], axis=0)
-  proposed_samples = tf.concat([F_p, B_p], axis=0)
-  p = tf.concat([p_f, p_b], axis=0)
+  x = tf.placeholder(tf.float32, shape=(None, 2))
+  _, _, _, MH = propose(x, sampler, do_mh_step=True)
 
   samples = np.random.randn(NUM_SAMPLES, X_DIM)
 
@@ -216,19 +210,16 @@ def check_moments():
     sess.run(tf.global_variables_initializer())
 
     for t in range(1000):
-      mask = np.random.randint(low=0, high=2, size=(NUM_SAMPLES,))
-
       feed_dict = {
-          F: samples[mask == 0],
-          B: samples[mask == 1],
+          x: samples,
       }
 
-      init_, proposed_, p_ = sess.run(
-          [init_samples, proposed_samples, p],
+      samples = sess.run(
+          MH[0],
           feed_dict
       )
 
-      samples = accept(init_, proposed_, p_)
+      # samples = accept(init_, proposed_, p_)
       list_samples.append(np.copy(samples))
 
   moments(list_samples)
@@ -397,10 +388,10 @@ TO_RUN = [
     # (check_jacobian, 'Log(det(jacobian)) is correct'),
     # (check_forward_backward_step, 'forward(backward(x)) = x for one step'),
     # (check_forward_backward_full, 'forward(backward(x)) = x for multiple steps'),
-    # (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
-    # (check_moments, 'Moments are correct for our method'),
+    (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
+    (check_moments, 'Moments are correct for our method'),
     # (check_moments_hmc, 'Moments are correct for HMC'),
-    (check_ais, 'AIS is correct'),
+    # (check_ais, 'AIS is correct'),
 ]
 
 def main(argv):
