@@ -61,7 +61,7 @@ class RoughWell(object):
   def get_energy_function(self):
     def fn(x, *args, **kwargs):
       n = tf.reduce_sum(tf.square(x), 1)
-      return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(n / (self.eps * self.eps)), 1)
+      return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(x / (self.eps * self.eps)), 1)
     return fn
 
   def get_samples(self, n):
