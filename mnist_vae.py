@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-26/%s' % train_folder
+    logdir = 'logs/09-27/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -169,11 +169,11 @@ def main(_):
         
         if only_two:
             if t < 2:
-                inverse_term += 0.5 * tf.reduce_mean(1.0 / v)
-                other_term -= 0.5 * tf.reduce_mean(v)
+                inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
+                # other_term -= 0.5 * tf.reduce_mean(v)
         else:
             inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
-            other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+        other_term += -1.0 / hps.MH * tf.reduce_mean(v)
         
         #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
         latent = MH[0]
@@ -296,5 +296,7 @@ def main(_):
     print 'Test fold evaluation'
     os.system(cmd % (logdir, 'test'))
 
+    print 'Sampler eval'
+    os.system('python eval_sampler.py --MH %d --exp_id "%s"' (hps.MH, '09-27'))
 if __name__ == '__main__':
     tf.app.run(main)
