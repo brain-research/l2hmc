@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-27/%s' % train_folder
+    logdir = 'logs/09-28/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -297,6 +297,6 @@ def main(_):
     os.system(cmd % (logdir, 'test'))
 
     print 'Sampler eval'
-    os.system('python eval_sampler.py --MH %d --exp_id "%s"' (hps.MH, '09-27'))
+    os.system('python eval_sampler.py --MH %d --exp_id "%s"' % (hps.MH, '09-28'))
 if __name__ == '__main__':
     tf.app.run(main)
