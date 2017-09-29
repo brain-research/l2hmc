@@ -153,15 +153,15 @@ def main(_):
         
 
 
-    latent = latent_q
+    latent = tf.stop_gradient(latent_q)
     
     inverse_term = 0.
     other_term = 0.
     
-    only_two = True
+    only_two = False
 
     for t in range(hps.MH):
-        latent = tf.stop_gradient(latent)
+        # latent = tf.stop_gradient(latent)
         Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
         v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
         
@@ -235,10 +235,15 @@ def main(_):
 
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     if not hps.hmc:
-        sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
+        gradients, variables = zip(*opt_sampler.compute_gradients(sampler_loss, var_list=var_from_scope('sampler')))
+        gradients, global_norm = tf.clip_by_global_norm(gradients, 5.0)
+        sampler_train_op = opt_sampler.apply_gradients(zip(gradients, variables))
+        # sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
     else:
         sampler_train_op = tf.no_op()
-    decoder_train_op = opt.minimize(likelihood, var_list=var_from_scope('decoder'))
+    decoder_train_op = opt.minimize(likelihood, var_list=var_from_scope('decoder'), global_step=global_step)
+
+    tf.summary.scalar('sampler_grad_norm', global_norm)
 
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
