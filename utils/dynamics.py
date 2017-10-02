@@ -299,4 +299,8 @@ class Dynamics(object):
     e_new = self.hamiltonian(x1, v1, aux=aux)
     e_old = self.hamiltonian(x0, v0, aux=aux)
 
-    return tf.exp(tf.minimum(e_old - e_new + log_jac, 0.0))
+    v = e_old - e_new + log_jac
+
+    mask = tf.cast(tf.is_finite(v), tf.float32)
+
+    return mask * tf.exp(tf.minimum(e_old - e_new + log_jac, 0.0))
