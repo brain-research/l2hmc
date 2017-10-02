@@ -239,7 +239,7 @@ class Dynamics(object):
 #
 #     return curr_x, curr_v, self.p_accept(x, v, curr_x, curr_v, j)
 
-  def forward(self, x, init_v=None, aux=None, log_path=False):
+  def forward(self, x, init_v=None, aux=None, log_path=False, log_jac=False):
     if init_v is None:
       v = tf.random_normal(tf.shape(x))
     else:
@@ -262,9 +262,12 @@ class Dynamics(object):
         loop_vars=[x, v, t, j]
     )
 
+    if log_jac:
+      return X, V, log_jac
+
     return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
-  def backward(self, x, init_v=None, aux=None):
+  def backward(self, x, init_v=None, aux=None, log_jac=False):
     if init_v is None:
       v = tf.random_normal(tf.shape(x))
     else:
@@ -286,6 +289,10 @@ class Dynamics(object):
         body=body,
         loop_vars=[x, v, t, j]
     )
+
+    if log_jac:
+      return X, V, log_jac
+
     return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
 
   def p_accept(self, x0, v0, x1, v1, log_jac, aux=None):

@@ -153,36 +153,73 @@ def main(_):
         
 
 
-    latent = tf.stop_gradient(latent_q)
-    
+    init_x = tf.stop_gradient(latent_q)
+    init_v = tf.random_normal(tf.shape(tf.init_x))
+
     inverse_term = 0.
     other_term = 0.
     
     only_two = False
 
-    for t in range(hps.MH):
-        # latent = tf.stop_gradient(latent)
-        Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
-        v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
+    nb_steps = tf.random_uniform((), minval=1, maxval=5, dtype=tf.int32)
+
+    def cond(latent, v, log_jac, t):
+        return tf.less(t, nb_steps)
+
+    def body(latent, v, log_jac, t):
+        Lx, Lv, px, _ = propose(latent, dynamics, init_v=v, aux=inp, log_jac=True, do_mh_step=False)
+        return Lx, Lv, log_jac+px, t+1
+
+    final_x, final_v, log_jac, _ = tf.while_loop(
+            cond=cond,
+            body=body,
+            loop_vars=[
+                init_x,
+                init_v,
+                tf.zeros((tf.shape(latent)[0])),
+                tf.constant(0.),
+            ]
+        )
+
+    p_accept = dynamics.p_accept(init_x, init_v, final_x, final_v, log_jac, aux=inp)
+
+    latent_T = tf_accept(init_x, final_x, p_accept)
+
+    v = tf.square(init_x - final_x) / tf.stop_gradient(tf.exp(2 * log_sigma) + 1e-4)
+
+    v = tf.reduce_sum(v, 1) * px + 1e-4
+
+    inverse_term = tf.reduce_mean(1.0 / v)
+    other_term = tf.reduce_mean(v)
+
+    energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
+
+    energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
+
+
+    # for t in range(hps.MH):
+    #     # latent = tf.stop_gradient(latent)
+    #     Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
+    #     v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
         
-        v = tf.reduce_sum(v, 1) * px + 1e-4
+    #     v = tf.reduce_sum(v, 1) * px + 1e-4
         
-        if only_two:
-            if t < 2:
-                inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
-                # other_term -= 0.5 * tf.reduce_mean(v)
-        else:
-            inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
-        other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+    #     if only_two:
+    #         if t < 2:
+    #             inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
+    #             # other_term -= 0.5 * tf.reduce_mean(v)
+    #     else:
+    #         inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
+    #     other_term += -1.0 / hps.MH * tf.reduce_mean(v)
         
-        #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
-        latent = MH[0]
+    #     #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
+    #     latent = MH[0]
         
     
-    latent_T = latent
+    # latent_T = latent
     
 
-    sampler_loss = inverse_term + other_term
+    sampler_loss = inverse_term - other_term + energy_loss
     
     opt = tf.train.AdamOptimizer(hps.learning_rate)
     
@@ -200,6 +237,7 @@ def main(_):
     
     tf.summary.scalar('inverse_term', inverse_term)
     tf.summary.scalar('other_term', other_term)
+    tf.summary.scalar('energy_loss', energy_loss)
     tf.summary.scalar('sampler_loss', sampler_loss)
     tf.summary.scalar('log_prob', likelihood)
     tf.summary.scalar('elbo', elbo)
