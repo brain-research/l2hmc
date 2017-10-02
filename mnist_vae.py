@@ -56,7 +56,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-28/%s' % train_folder
+    logdir = 'logs/09-29/%s' % train_folder
 
     print('Saving logs to %s' % logdir)
 
@@ -243,7 +243,8 @@ def main(_):
         sampler_train_op = tf.no_op()
     decoder_train_op = opt.minimize(likelihood, var_list=var_from_scope('decoder'), global_step=global_step)
 
-    tf.summary.scalar('sampler_grad_norm', global_norm)
+    if not hps.hmc:
+    	tf.summary.scalar('sampler_grad_norm', global_norm)
 
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
