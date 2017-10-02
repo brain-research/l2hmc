@@ -256,16 +256,16 @@ class Dynamics(object):
     def cond(x, v, t, j):
       return tf.less(t, self.T)
 
-    X, V, t, log_jac = tf.while_loop(
+    X, V, t, log_jac_ = tf.while_loop(
         cond=cond,
         body=body,
         loop_vars=[x, v, t, j]
     )
 
     if log_jac:
-      return X, V, log_jac
+      return X, V, log_jac_
 
-    return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
+    return X, V, self.p_accept(x, v, X, V, log_jac_, aux=aux)
 
   def backward(self, x, init_v=None, aux=None, log_jac=False):
     if init_v is None:
@@ -284,16 +284,16 @@ class Dynamics(object):
     def cond(x, v, t, j):
       return tf.less(t, self.T)
 
-    X, V, t, log_jac = tf.while_loop(
+    X, V, t, log_jac_ = tf.while_loop(
         cond=cond,
         body=body,
         loop_vars=[x, v, t, j]
     )
 
     if log_jac:
-      return X, V, log_jac
+      return X, V, log_jac_
 
-    return X, V, self.p_accept(x, v, X, V, log_jac, aux=aux)
+    return X, V, self.p_accept(x, v, X, V, log_jac_, aux=aux)
 
   def p_accept(self, x0, v0, x1, v1, log_jac, aux=None):
     e_new = self.hamiltonian(x1, v1, aux=aux)

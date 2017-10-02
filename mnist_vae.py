@@ -8,7 +8,7 @@ from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihoo
 from utils.distributions import Gaussian, GMM, GaussianFunnel, gen_ring
 from utils.layers import Linear, Parallel, Sequential, Zip, ScaleTanh
 from utils.dynamics import Dynamics
-from utils.sampler import propose
+from utils.sampler import propose, tf_accept
 from utils.losses import get_loss, loss_mixed
 
 FLAGS = tf.app.flags.FLAGS
@@ -154,7 +154,7 @@ def main(_):
 
 
     init_x = tf.stop_gradient(latent_q)
-    init_v = tf.random_normal(tf.shape(tf.init_x))
+    init_v = tf.random_normal(tf.shape(init_x))
 
     inverse_term = 0.
     other_term = 0.
@@ -164,7 +164,7 @@ def main(_):
     nb_steps = tf.random_uniform((), minval=1, maxval=5, dtype=tf.int32)
 
     def cond(latent, v, log_jac, t):
-        return tf.less(t, nb_steps)
+        return tf.less(t, tf.cast(nb_steps, tf.float32))
 
     def body(latent, v, log_jac, t):
         Lx, Lv, px, _ = propose(latent, dynamics, init_v=v, aux=inp, log_jac=True, do_mh_step=False)
@@ -176,7 +176,7 @@ def main(_):
             loop_vars=[
                 init_x,
                 init_v,
-                tf.zeros((tf.shape(latent)[0])),
+                tf.zeros((tf.shape(init_x)[0],)),
                 tf.constant(0.),
             ]
         )
@@ -187,7 +187,7 @@ def main(_):
 
     v = tf.square(init_x - final_x) / tf.stop_gradient(tf.exp(2 * log_sigma) + 1e-4)
 
-    v = tf.reduce_sum(v, 1) * px + 1e-4
+    v = tf.reduce_sum(v, 1) * p_accept + 1e-4
 
     inverse_term = tf.reduce_mean(1.0 / v)
     other_term = tf.reduce_mean(v)
