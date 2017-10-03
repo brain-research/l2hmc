@@ -54,14 +54,18 @@ class Gaussian(object):
 
 
 class RoughWell(object):
-  def __init__(self, dim, eps):
+  def __init__(self, dim, eps, easy=False):
     self.dim = dim
     self.eps = eps
+    self.easy = easy
 
   def get_energy_function(self):
     def fn(x, *args, **kwargs):
       n = tf.reduce_sum(tf.square(x), 1)
-      return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(x / (self.eps * self.eps)), 1)
+      if not self.easy:
+        return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(x / (self.eps * self.eps)), 1)
+      else:
+        return 0.5 * n + self.eps * tf.reduce_sum(tf.cos(x / self.eps), 1)
     return fn
 
   def get_samples(self, n):

@@ -86,7 +86,7 @@ class Dynamics(object):
         m[ind] = 1
         mask_per_step.append(m)
     
-    self.mask = tf.constant(np.stack(mask_per_step), dtype=tf.float32)
+    self.mask = tf.constant(np.stack(mask_per_step), dtype=tf.float64)
     
   def _get_mask(self, step):
     m = tf.gather(self.mask, tf.cast(step, dtype=tf.int32))
@@ -200,7 +200,7 @@ class Dynamics(object):
     if self.use_temperature:
       T = self.temperature
     else:
-      T = tf.constant(1.0)
+      T = tf.constant(1.0, dtype=tf.float64)
 
     if aux is not None:
       return self._fn(x, aux=aux) / T
@@ -246,7 +246,7 @@ class Dynamics(object):
       v = init_v
 
     dN = tf.shape(x)[0]
-    t = tf.constant(0.)
+    t = tf.constant(0., dtype=tf.float64)
     j = tf.zeros((dN,))
 
     def body(x, v, t, j):
@@ -274,7 +274,7 @@ class Dynamics(object):
       v = init_v
 
     dN = tf.shape(x)[0]
-    t = tf.constant(0., name='step_backward')
+    t = tf.constant(0., name='step_backward', dtype=tf.float64)
     j = tf.zeros((dN,), name='acc_jac_backward')
 
     def body(x, v, t, j):
