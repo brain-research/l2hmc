@@ -25,7 +25,8 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     latent_dim=50,
     update_sampler_every=1,
     eval_samples_every=1,
-    hmc=False
+    hmc=False,
+    eps=0.05,
 )
 
 # hardcode the loss
@@ -56,7 +57,7 @@ def main(_):
         ',',
     )
 
-    logdir = 'logs/09-29/%s' % train_folder
+    logdir = 'logs/%s/%s' % (FLAGS.exp_id, train_folder)
 
     print('Saving logs to %s' % logdir)
 
@@ -144,7 +145,7 @@ def main(_):
             hps.latent_dim, 
             energy, 
             T=hps.leapfrogs, 
-            eps=0.1, 
+            eps=hps.eps, 
             hmc=hps.hmc, 
             net_factory=net_factory, 
             eps_trainable=True, 
@@ -161,7 +162,7 @@ def main(_):
     
     only_two = False
 
-    nb_steps = tf.random_uniform((), minval=1, maxval=5, dtype=tf.int32)
+    nb_steps = tf.random_uniform((), minval=1, maxval=hps.MH, dtype=tf.int32)
 
     def cond(latent, v, log_jac, t):
         return tf.less(t, tf.cast(nb_steps, tf.float32))
@@ -235,16 +236,6 @@ def main(_):
     bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
     elbo = tf.reduce_mean(kl+bce)
     
-    tf.summary.scalar('inverse_term', inverse_term)
-    tf.summary.scalar('other_term', other_term)
-    tf.summary.scalar('energy_loss', energy_loss)
-    tf.summary.scalar('sampler_loss', sampler_loss)
-    tf.summary.scalar('log_prob', likelihood)
-    tf.summary.scalar('elbo', elbo)
-    loss_summaries = tf.summary.merge_all()
-
-
-    
     # For sample generation
     z_eval = tf.placeholder(tf.float32, shape=(None, 50))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
@@ -283,6 +274,16 @@ def main(_):
 
     if not hps.hmc:
     	tf.summary.scalar('sampler_grad_norm', global_norm)
+
+    tf.summary.scalar('inverse_term', inverse_term)
+    tf.summary.scalar('other_term', other_term)
+    tf.summary.scalar('energy_loss', energy_loss)
+    tf.summary.scalar('sampler_loss', sampler_loss)
+    tf.summary.scalar('log_prob', likelihood)
+    tf.summary.scalar('elbo', elbo)
+    tf.summary.scalar('p_accept', tf.reduce_mean(p_accept))
+    
+    loss_summaries = tf.summary.merge_all()
 
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
@@ -341,6 +342,6 @@ def main(_):
     os.system(cmd % (logdir, 'test'))
 
     print 'Sampler eval'
-    os.system('python eval_sampler.py --MH %d --exp_id "%s"' % (hps.MH, '09-28'))
+    os.system('python eval_sampler.py --MH %d --exp_id "%s"' % (hps.MH, FLAGS.exp_id))
 if __name__ == '__main__':
     tf.app.run(main)
