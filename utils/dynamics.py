@@ -22,6 +22,8 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
+from config import TF_FLOAT, NP_FLOAT
+
 
 def safe_exp(x, name=None):
   return tf.exp(x)
@@ -40,7 +42,7 @@ class Dynamics(object):
 
     self.x_dim = x_dim
     self.use_temperature = use_temperature
-    self.temperature = tf.placeholder(tf.float32, shape=())
+    self.temperature = tf.placeholder(TF_FLOAT, shape=())
     
     if not hmc:
         alpha = tf.get_variable(
@@ -49,7 +51,7 @@ class Dynamics(object):
             trainable=eps_trainable,
         )
     else:
-        alpha = tf.log(tf.constant(eps, dtype=tf.float32))
+        alpha = tf.log(tf.constant(eps, dtype=TF_FLOAT))
 
     self.eps = safe_exp(alpha, name='alpha')
     self._fn = energy_function
@@ -86,7 +88,7 @@ class Dynamics(object):
         m[ind] = 1
         mask_per_step.append(m)
     
-    self.mask = tf.constant(np.stack(mask_per_step), dtype=tf.float64)
+    self.mask = tf.constant(np.stack(mask_per_step), dtype=TF_FLOAT)
     
   def _get_mask(self, step):
     m = tf.gather(self.mask, tf.cast(step, dtype=tf.int32))
@@ -200,7 +202,7 @@ class Dynamics(object):
     if self.use_temperature:
       T = self.temperature
     else:
-      T = tf.constant(1.0, dtype=tf.float64)
+      T = tf.constant(1.0, dtype=TF_FLOAT)
 
     if aux is not None:
       return self._fn(x, aux=aux) / T
@@ -222,7 +224,7 @@ class Dynamics(object):
     b = b.astype('bool')
     nb = np.logical_not(b)
 
-    return b.astype('float32'), nb.astype('float32')
+    return b.astype(NP_FLOAT), nb.astype(NP_FLOAT)
 #
 #   def forward(self, x, init_v=None):
 #     if init_v is None:
@@ -246,7 +248,7 @@ class Dynamics(object):
       v = init_v
 
     dN = tf.shape(x)[0]
-    t = tf.constant(0., dtype=tf.float64)
+    t = tf.constant(0., dtype=TF_FLOAT)
     j = tf.zeros((dN,))
 
     def body(x, v, t, j):
@@ -274,7 +276,7 @@ class Dynamics(object):
       v = init_v
 
     dN = tf.shape(x)[0]
-    t = tf.constant(0., name='step_backward', dtype=tf.float64)
+    t = tf.constant(0., name='step_backward', dtype=TF_FLOAT)
     j = tf.zeros((dN,), name='acc_jac_backward')
 
     def body(x, v, t, j):

@@ -23,17 +23,16 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-FLOAT_TYPE = tf.float64
+from config import TF_FLOAT, NP_FLOAT
 
 class Linear(object):
   def __init__(self, in_, out_, scope='linear', factor=1.0):
     with tf.variable_scope(scope):
-      initializer = tf.contrib.layers.variance_scaling_initializer(factor=factor * 2.0, mode='FAN_IN', uniform=False, dtype=tf.float64)
+      initializer = tf.contrib.layers.variance_scaling_initializer(factor=factor * 2.0, mode='FAN_IN', uniform=False, dtype=TF_FLOAT)
       self.W = tf.get_variable('W', shape=(in_, out_), initializer=initializer)
-      self.b = tf.get_variable('b', shape=(out_,), initializer=tf.constant_initializer(0., dtype=FLOAT_TYPE))
+      self.b = tf.get_variable('b', shape=(out_,), initializer=tf.constant_initializer(0., dtype=TF_FLOAT))
 
   def __call__(self, x):
-    print(self.W.dtype, self.b.dtype)
     return tf.add(tf.matmul(x, self.W), self.b)
 
 class ScaledTanh(object):
@@ -92,7 +91,7 @@ class Sequential(object):
 class ScaleTanh(object):
   def __init__(self, in_, scope='scale_tanh'):
     with tf.variable_scope(scope):
-      self.scale = tf.exp(tf.get_variable('scale', shape=(1, in_), initializer=tf.constant_initializer(0., dtype=FLOAT_TYPE)))
+      self.scale = tf.exp(tf.get_variable('scale', shape=(1, in_), initializer=tf.constant_initializer(0., dtype=TF_FLOAT)))
   def __call__(self, x):
     return self.scale * tf.nn.tanh(x)
     
