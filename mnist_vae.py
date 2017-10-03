@@ -236,17 +236,6 @@ def main(_):
     bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
     elbo = tf.reduce_mean(kl+bce)
     
-    # For sample generation
-    z_eval = tf.placeholder(tf.float32, shape=(None, 50))
-    x_eval = tf.nn.sigmoid(decoder(z_eval))
-
-    samples_summary = tf.summary.image(
-        'samples',
-        tf.reshape(x_eval, (-1, 28, 28, 1)),
-        64,
-    )
-
-    
     batch_per_epoch = N / hps.batch_size
 
     # Setting up train ops
@@ -285,6 +274,16 @@ def main(_):
     
     loss_summaries = tf.summary.merge_all()
 
+    # For sample generation
+    z_eval = tf.placeholder(tf.float32, shape=(None, 50))
+    x_eval = tf.nn.sigmoid(decoder(z_eval))
+
+    samples_summary = tf.summary.image(
+        'samples',
+        tf.reshape(x_eval, (-1, 28, 28, 1)),
+        64,
+    )
+    
     saver = tf.train.Saver()
     writer = tf.summary.FileWriter(logdir)
 
