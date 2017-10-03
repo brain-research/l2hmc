@@ -17,13 +17,15 @@ parser.add_argument('--exp_id', default='09-24', type=str)
 parser.add_argument('--leapfrogs', default=5, type=int)
 parser.add_argument('--latent_dim', default=50, type=int)
 parser.add_argument('--MH', default=5, type=int)
+parser.add_argument('--eps', default=0.01, type=float)
+parser.add_argument('--path', type=str)
 args = parser.parse_args()
 
 # First load the graph and grab the mask
 
-logdir = 'logs/%s/optimizer=adam,learning_rate=0.001,latent_dim=%d,MH=%d,batch_size=512,update_sampler_every=1,leapfrogs=%d,hmc=False' \
-	% (args.exp_id, args.latent_dim, args.MH, args.leapfrogs)
-path = '%s/model.ckpt' % logdir
+logdir = 'logs/%s/optimizer=adam,learning_rate=0.001,latent_dim=%d,eps=%g,MH=%d,batch_size=512,update_sampler_every=1,leapfrogs=%d,hmc=False' \
+	% (args.exp_id, args.latent_dim, args.eps, args.MH, args.leapfrogs)
+path = '%s/model.ckpt' % args.path
 
 with tf.gfile.Open(path+'.meta'):
     tf.reset_default_graph()
@@ -180,4 +182,4 @@ plt.xlabel('# MH steps')
 plt.ylabel('Autocovariance')
 plt.legend()
 
-plt.savefig('%s/sampler_eval.png' % logdir)
+plt.savefig('%s/sampler_eval.png' % args.path)

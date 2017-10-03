@@ -23,7 +23,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-from config import TF_FLOAT, NP_FLOAT
+#from config import TF_FLOAT, NP_FLOAT
+
+TF_FLOAT = tf.float32
+NP_FLOAT = np.float32
 
 class Linear(object):
   def __init__(self, in_, out_, scope='linear', factor=1.0):

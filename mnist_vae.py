@@ -341,6 +341,7 @@ def main(_):
     os.system(cmd % (logdir, 'test'))
 
     print 'Sampler eval'
-    os.system('python eval_sampler.py --MH %d --exp_id "%s"' % (hps.MH, FLAGS.exp_id))
+    os.system('python eval_sampler.py --path "%s"' % logdir[-1])
+
 if __name__ == '__main__':
     tf.app.run(main)
