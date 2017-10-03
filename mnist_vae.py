@@ -195,7 +195,7 @@ def main(_):
     energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
 
     energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
-
+    energy_loss = 0.
 
     # for t in range(hps.MH):
     #     # latent = tf.stop_gradient(latent)

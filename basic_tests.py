@@ -384,13 +384,13 @@ def check_ais():
   assert np.abs(log_Z_hat - real_log_Z) < 5e-2
 
 TO_RUN = [
-    # (check_while_loop, 'forward_step composed T times is equivalent to forward'),
-    # (check_jacobian, 'Log(det(jacobian)) is correct'),
-    # (check_forward_backward_step, 'forward(backward(x)) = x for one step'),
-    # (check_forward_backward_full, 'forward(backward(x)) = x for multiple steps'),
+    (check_while_loop, 'forward_step composed T times is equivalent to forward'),
+    (check_jacobian, 'Log(det(jacobian)) is correct'),
+    (check_forward_backward_step, 'forward(backward(x)) = x for one step'),
+    (check_forward_backward_full, 'forward(backward(x)) = x for multiple steps'),
     (check_radford_trajectory, 'HMC with Neal\'s paper gives Neal\'s results'),
     (check_moments, 'Moments are correct for our method'),
-    # (check_moments_hmc, 'Moments are correct for HMC'),
+    (check_moments_hmc, 'Moments are correct for HMC'),
     # (check_ais, 'AIS is correct'),
 ]
 
