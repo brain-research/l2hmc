@@ -32,3 +32,34 @@ def propose(x, dynamics, init_v=None, aux=None, do_mh_step=False, log_jac=False)
 def tf_accept(x, Lx, px):
     mask = (px - tf.random_uniform(tf.shape(px)) >= 0.)
     return tf.where(mask, Lx, x)
+
+def chain_operator(init_x, dynamics, nb_steps, aux=None, init_v=None, do_mh_step=False):
+    if not init_v:
+        init_v = tf.random_normal(tf.shape(init_x))
+
+    def cond(latent, v, log_jac, t):
+        return tf.less(t, tf.cast(nb_steps, tf.float32))
+
+    def body(x, v, log_jac, t):
+        Lx, Lv, px, _ = propose(x, dynamics, init_v=v, aux=aux, log_jac=True, do_mh_step=False)
+        return Lx, Lv, log_jac+px, t+1
+
+    final_x, final_v, log_jac, _ = tf.while_loop(
+            cond=cond,
+            body=body,
+            loop_vars=[
+                init_x,
+                init_v,
+                tf.zeros((tf.shape(init_x)[0],)),
+                tf.constant(0.),
+            ]
+        )
+
+    p_accept = dynamics.p_accept(init_x, init_v, final_x, final_v, log_jac, aux=aux)
+
+    outputs = []
+    if do_mh_step:
+        outputs.append(tf_accept(init_x, final_x, p_accept))
+
+    return final_x, final_v, p_accept, outputs
+    

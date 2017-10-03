@@ -8,7 +8,7 @@ from utils.func_utils import accept, jacobian, autocovariance, get_log_likelihoo
 from utils.distributions import Gaussian, GMM, GaussianFunnel, gen_ring
 from utils.layers import Linear, Parallel, Sequential, Zip, ScaleTanh
 from utils.dynamics import Dynamics
-from utils.sampler import propose, tf_accept
+from utils.sampler import propose, tf_accept, chain_operator
 from utils.losses import get_loss, loss_mixed
 
 FLAGS = tf.app.flags.FLAGS
@@ -25,6 +25,8 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     latent_dim=50,
     update_sampler_every=1,
     eval_samples_every=1,
+    random_lf_composition=False,
+    stop_gradient=False,
     hmc=False,
     eps=0.05,
 )
@@ -157,67 +159,49 @@ def main(_):
     init_x = tf.stop_gradient(latent_q)
     init_v = tf.random_normal(tf.shape(init_x))
 
-    inverse_term = 0.
-    other_term = 0.
-    
-    only_two = False
+    if hps.random_lf_composition:
+        nb_steps = tf.random_uniform((), minval=1, maxval=hps.MH, dtype=tf.int32)
 
-    nb_steps = tf.random_uniform((), minval=1, maxval=hps.MH, dtype=tf.int32)
+        final_x, _, p_accept, MH = chain_operator(init_x, dynamics, nb_steps, aux=inp, do_mh_step=True)
 
-    def cond(latent, v, log_jac, t):
-        return tf.less(t, tf.cast(nb_steps, tf.float32))
+        v = tf.square(init_x - final_x) / tf.stop_gradient(tf.exp(2 * log_sigma) + 1e-4)
 
-    def body(latent, v, log_jac, t):
-        Lx, Lv, px, _ = propose(latent, dynamics, init_v=v, aux=inp, log_jac=True, do_mh_step=False)
-        return Lx, Lv, log_jac+px, t+1
+        v = tf.reduce_sum(v, 1) * p_accept + 1e-4
 
-    final_x, final_v, log_jac, _ = tf.while_loop(
-            cond=cond,
-            body=body,
-            loop_vars=[
-                init_x,
-                init_v,
-                tf.zeros((tf.shape(init_x)[0],)),
-                tf.constant(0.),
-            ]
-        )
+        # compute losses
+        inverse_term = tf.reduce_mean(1.0 / v)
+        other_term = tf.reduce_mean(v)
+        energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
+        energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
+        energy_loss = 0.
+        latent = MH[0]
 
-    p_accept = dynamics.p_accept(init_x, init_v, final_x, final_v, log_jac, aux=inp)
+    else:
+        inverse_term = 0.
+        other_term = 0.
 
-    latent_T = tf_accept(init_x, final_x, p_accept)
+        for t in range(hps.MH):
+            if hps.stop_gradient:
+                latent = tf.stop_gradient(latent)
 
-    v = tf.square(init_x - final_x) / tf.stop_gradient(tf.exp(2 * log_sigma) + 1e-4)
-
-    v = tf.reduce_sum(v, 1) * p_accept + 1e-4
-
-    inverse_term = tf.reduce_mean(1.0 / v)
-    other_term = tf.reduce_mean(v)
-
-    energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
-
-    energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
-    energy_loss = 0.
-
-    # for t in range(hps.MH):
-    #     # latent = tf.stop_gradient(latent)
-    #     Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
-    #     v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
+            Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
+            v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
+            
+            v = tf.reduce_sum(v, 1) * px + 1e-4
+            
+            if only_two:
+                if t < 2:
+                    inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
+                    # other_term -= 0.5 * tf.reduce_mean(v)
+            else:
+                inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
+            other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+            
+            #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
+            latent = MH[0]
+            
         
-    #     v = tf.reduce_sum(v, 1) * px + 1e-4
-        
-    #     if only_two:
-    #         if t < 2:
-    #             inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
-    #             # other_term -= 0.5 * tf.reduce_mean(v)
-    #     else:
-    #         inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
-    #     other_term += -1.0 / hps.MH * tf.reduce_mean(v)
-        
-    #     #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
-    #     latent = MH[0]
-        
-    
-    # latent_T = latent
+        latent_T = latent
     
 
     sampler_loss = inverse_term - other_term + energy_loss

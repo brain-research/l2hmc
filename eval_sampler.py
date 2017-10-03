@@ -135,7 +135,9 @@ dynamics.mask = tf.constant(mask, tf.float32)
 
 # CS placeholders
 z_start = tf.placeholder(tf.float32, shape=(None, 50))
-_, _, _, MH = propose(z_start, dynamics, do_mh_step=True, aux=inp)
+# _, _, _, MH = propose(z_start, dynamics, do_mh_step=True, aux=inp)
+nb_steps = tf.random_uniform((), minval=1, maxval=4, dtype=tf.int32)
+_, _, _, MH = chain_operator(z_start, dynamics, nb_steps, do_mh_step=True, aux=inp)
 
 saver = tf.train.Saver()
 sess = tf.Session()
