@@ -29,6 +29,7 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     stop_gradient=False,
     hmc=False,
     eps=0.05,
+    energy_scale=0.,
 )
 
 # hardcode the loss
@@ -159,53 +160,50 @@ def main(_):
     init_x = tf.stop_gradient(latent_q)
     init_v = tf.random_normal(tf.shape(init_x))
 
-    if hps.random_lf_composition:
-        nb_steps = tf.random_uniform((), minval=1, maxval=hps.MH, dtype=tf.int32)
-
-        final_x, _, p_accept, MH = chain_operator(init_x, dynamics, nb_steps, aux=inp, do_mh_step=True)
-
-        v = tf.square(init_x - final_x) / tf.stop_gradient(tf.exp(2 * log_sigma) + 1e-4)
-
-        v = tf.reduce_sum(v, 1) * p_accept + 1e-4
-
-        # compute losses
-        inverse_term = tf.reduce_mean(1.0 / v)
-        other_term = tf.reduce_mean(v)
-        energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
-        energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
-        energy_loss = 0.
-        latent = MH[0]
-
-    else:
+    for t in range(hps.MH):
         inverse_term = 0.
         other_term = 0.
+        energy_loss = 0.
 
-        for t in range(hps.MH):
-            if hps.stop_gradient:
-                latent = tf.stop_gradient(latent)
+        if hps.stop_gradient:
+            latent = tf.stop_gradient(latent)
 
-            Lx, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
-            v = tf.square(Lx - latent) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)
-            
-            v = tf.reduce_sum(v, 1) * px + 1e-4
-            
-            if only_two:
-                if t < 2:
-                    inverse_term += 1.0 / min(hps.MH, 2) * tf.reduce_mean(1.0 / v)
-                    # other_term -= 0.5 * tf.reduce_mean(v)
-            else:
-                inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
-            other_term += -1.0 / hps.MH * tf.reduce_mean(v)
+        if hps.random_lf_composition > 0:
+            nb_steps = tf.random_uniform((), minval=1, maxval=hps.random_lf_composition, dtype=tf.int32)
+
+            final_x, _, p_accept, MH = chain_operator(latent, dynamics, nb_steps, aux=inp, do_mh_step=True)
+
+            energy_loss = 0.
+            latent = MH[0]
+
+        else:
+            inverse_term = 0.
+            other_term = 0.
+
+            final_x, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
             
             #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
             latent = MH[0]
             
-        
-        latent_T = latent
-    
+        # distance
+        v = tf.square(final_x - init_x) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)    
+        v = tf.reduce_sum(v, 1) * px + 1e-4
 
-    sampler_loss = inverse_term - other_term + energy_loss
-    
+        # energy
+
+        energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
+        energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
+
+        inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
+        other_term -= 1.0 / hps.MH * tf.reduce_mean(v)
+        energy_loss += 1.0 / hps.MH 
+
+        init_x = MH[0]
+
+    latent_T = init_x
+
+    sampler_loss = inverse_term + other_term + hps.energy_scale * energy_loss
+
     opt = tf.train.AdamOptimizer(hps.learning_rate)
     
     logits_T = decoder(tf.stop_gradient(latent_T))
