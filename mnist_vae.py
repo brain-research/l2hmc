@@ -25,7 +25,7 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     latent_dim=50,
     update_sampler_every=1,
     eval_samples_every=1,
-    random_lf_composition=False,
+    random_lf_composition=0,
     stop_gradient=False,
     hmc=False,
     eps=0.05,
@@ -166,24 +166,22 @@ def main(_):
         energy_loss = 0.
 
         if hps.stop_gradient:
-            latent = tf.stop_gradient(latent)
+            init_x = tf.stop_gradient(init_x)
 
         if hps.random_lf_composition > 0:
             nb_steps = tf.random_uniform((), minval=1, maxval=hps.random_lf_composition, dtype=tf.int32)
 
-            final_x, _, p_accept, MH = chain_operator(latent, dynamics, nb_steps, aux=inp, do_mh_step=True)
+            final_x, _, px, MH = chain_operator(init_x, dynamics, nb_steps, aux=inp, do_mh_step=True)
 
             energy_loss = 0.
-            latent = MH[0]
 
         else:
             inverse_term = 0.
             other_term = 0.
 
-            final_x, _, px, MH = propose(latent, dynamics, aux=inp, do_mh_step=True)
+            final_x, _, px, MH = propose(init_x, dynamics, aux=inp, do_mh_step=True)
             
             #sampler_loss += 1.0 / hps.MH * loss_mixed(latent, Lx, px, scale=tf.stop_gradient(tf.exp(log_sigma)))
-            latent = MH[0]
             
         # distance
         v = tf.square(final_x - init_x) / (tf.stop_gradient(tf.exp(2 * log_sigma)) + 1e-4)    
@@ -216,7 +214,7 @@ def main(_):
 
     kl = normal_kl(mu, tf.exp(log_sigma), 0., 1.)
     bce = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=inp, logits=logits), axis=1)
-    elbo = tf.reduce_mean(kl+bce)
+    elbo = tf.check_numerics(tf.reduce_mean(kl+bce), 'elbo NaN')
     
     batch_per_epoch = N / hps.batch_size
 
@@ -252,7 +250,7 @@ def main(_):
     tf.summary.scalar('sampler_loss', sampler_loss)
     tf.summary.scalar('log_prob', likelihood)
     tf.summary.scalar('elbo', elbo)
-    tf.summary.scalar('p_accept', tf.reduce_mean(p_accept))
+    tf.summary.scalar('p_accept', tf.reduce_mean(px))
     
     loss_summaries = tf.summary.merge_all()
 
