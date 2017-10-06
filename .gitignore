@@ -3,3 +3,4 @@ logs/
 MNIST_data/
 gpu*
 .ipynb_checkpoints/
+*.sh
