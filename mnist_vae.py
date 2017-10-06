@@ -28,7 +28,7 @@ DEFAULT_HPARAMS = tf.contrib.training.HParams(
     random_lf_composition=0,
     stop_gradient=False,
     hmc=False,
-    eps=0.05,
+    eps=0.1,
     energy_scale=0.,
 )
 
@@ -189,12 +189,11 @@ def main(_):
 
         # energy
 
-        energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) + 1e-4
-        energy_loss = tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff)
+        energy_diff = tf.square(energy(final_x, aux=inp) - energy(init_x, aux=inp)) * px + 1e-4
 
         inverse_term += 1.0 / hps.MH * tf.reduce_mean(1.0 / v)
         other_term -= 1.0 / hps.MH * tf.reduce_mean(v)
-        energy_loss += 1.0 / hps.MH 
+        energy_loss += 1.0 / hps.MH * (tf.reduce_mean(1.0 / energy_diff) - tf.reduce_mean(energy_diff))
 
         init_x = MH[0]
 
@@ -312,16 +311,16 @@ def main(_):
             samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
-    cmd = 'python eval_vae.py --path "%s/" --split %s --anneal_steps 5000'
+    for AS in [1, 2, 3, 4]:
+        cmd = 'python eval_vae.py --path "%s/" --split %s --anneal_steps %d'
+        print 'Train fold evaluation. AS steps: %d' % AS
+        os.system(cmd % (logdir, 'train', AS))
 
-    print 'Train fold evaluation'
-    os.system(cmd % (logdir, 'train'))
-
-    print 'Test fold evaluation'
-    os.system(cmd % (logdir, 'test'))
+        print 'Test fold evaluation. AS steps: %d' % AS
+        os.system(cmd % (logdir, 'test', AS))
 
     print 'Sampler eval'
-    os.system('python eval_sampler.py --path "%s"' % logdir[-1])
+    os.system('python eval_sampler.py --path "%s"' % logdir[:-1])
 
 if __name__ == '__main__':
     tf.app.run(main)

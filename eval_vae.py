@@ -12,7 +12,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str)
-parser.add_argument('--leapfrogs', default=5, type=int)
+parser.add_argument('--leapfrogs', default=10, type=int)
 parser.add_argument('--anneal_steps', default=100, type=int)
 parser.add_argument('--split', default='test', type=str)
 parser.add_argument('--latent_dim', default=50, type=int)
@@ -39,7 +39,7 @@ def final_energy(z, aux=None):
     log_prior = -0.5 * tf.reduce_sum(tf.square(z), axis=1)
     return -log_posterior - log_prior
 
-p_x_hat = ais_estimate(init_energy, final_energy, args.anneal_steps, z, x_dim=args.latent_dim, aux=inp, leapfrogs=3, step_size=0.1, num_splits=50,) #refresh=True, refreshment=0.1)
+p_x_hat = ais_estimate(init_energy, final_energy, args.anneal_steps, z, x_dim=args.latent_dim, aux=inp, leapfrogs=args.leapfrogs, step_size=0.1, num_splits=50,) #refresh=True, refreshment=0.1)
 
 saver = tf.train.Saver()
 
@@ -75,5 +75,5 @@ with tf.Session() as sess:
 		print fetched[1]
 	print(est_log_p / N)
 
-	with open(args.path+args.split+'_ll.txt', 'w') as f:
-		f.write(str(est_log_p / N))
+	with open(args.path+args.split+'_ll.txt', 'a') as f:
+		f.write(str(est_log_p / N)+'\n')
