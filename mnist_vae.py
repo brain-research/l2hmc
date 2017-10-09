@@ -311,7 +311,7 @@ def main(_):
             samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
-    for AS in [1, 2, 3, 4]:
+    for AS in [64, 256, 1024, 4096]:
         cmd = 'python eval_vae.py --path "%s/" --split %s --anneal_steps %d'
         print 'Train fold evaluation. AS steps: %d' % AS
         os.system(cmd % (logdir, 'train', AS))
@@ -320,7 +320,7 @@ def main(_):
         os.system(cmd % (logdir, 'test', AS))
 
     print 'Sampler eval'
-    os.system('python eval_sampler.py --path "%s"' % logdir[:-1])
+    os.system('python eval_sampler.py --path "%s"' % logdir)
 
 if __name__ == '__main__':
     tf.app.run(main)
