@@ -201,7 +201,6 @@ def main(_):
 
     sampler_loss = inverse_term + other_term + hps.energy_scale * energy_loss
 
-    opt = tf.train.AdamOptimizer(hps.learning_rate)
     
     logits_T = decoder(tf.stop_gradient(latent_T))
     partition = tf.constant(np.sqrt((2 * np.pi) ** hps.latent_dim), dtype=tf.float32)
@@ -227,21 +226,24 @@ def main(_):
     #     0.96, 
     #     staircase=True
     # )
-
-    opt_sampler = tf.train.AdamOptimizer(hps.learning_rate)
-
+    
+    learning_rate = tf.train.piecewise_constant(global_step, [batch_per_epoch * 500.], [1e-3, 1e-4])
+    
+    opt_sampler = tf.train.AdamOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate)
+    
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     if not hps.hmc:
         gradients, variables = zip(*opt_sampler.compute_gradients(sampler_loss, var_list=var_from_scope('sampler')))
-        gradients, global_norm = tf.clip_by_global_norm(gradients, 5.0)
+        # gradients, global_norm = tf.clip_by_global_norm(gradients, 5.0)
         sampler_train_op = opt_sampler.apply_gradients(zip(gradients, variables))
         # sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
     else:
         sampler_train_op = tf.no_op()
     decoder_train_op = opt.minimize(likelihood, var_list=var_from_scope('decoder'), global_step=global_step)
 
-    if not hps.hmc:
-    	tf.summary.scalar('sampler_grad_norm', global_norm)
+    # if not hps.hmc:
+    #    tf.summary.scalar('sampler_grad_norm', global_norm)
 
     tf.summary.scalar('inverse_term', inverse_term)
     tf.summary.scalar('other_term', other_term)
@@ -291,17 +293,17 @@ def main(_):
             
             fetches = [
                 elbo, sampler_loss, likelihood, loss_summaries, \
-                global_step, elbo_train_op, decoder_train_op
+                global_step, elbo_train_op, decoder_train_op, learning_rate
             ]
-            
+                        
             if t % hps.update_sampler_every == 0:
                 fetches += [sampler_train_op]
                 
             fetched = sess.run(fetches, {inp: batch})
-            
+                        
             if t % 50 == 0:
-                print 'Step:%d::%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Time: %.2e' \
-                    % (fetched[4], t, batch_per_epoch, fetched[0], fetched[1], fetched[2], time.time()-time0)
+                print 'Step:%d::%d/%d::ELBO: %.3e::Loss sampler: %.3e:: Log prob: %.3e:: Lr: %g:: Time: %.2e' \
+                    % (fetched[4], t, batch_per_epoch, fetched[0], fetched[1], fetched[2], fetched[-2], time.time()-time0)
                 time0 = time.time()
 
             writer.add_summary(fetched[3], global_step=counter)
@@ -311,7 +313,7 @@ def main(_):
             samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
-    for AS in [64, 256, 1024, 4096]:
+    for AS in [64, 256, 1024, 4096, 8192]:
         cmd = 'python eval_vae.py --path "%s/" --split %s --anneal_steps %d'
         print 'Train fold evaluation. AS steps: %d' % AS
         os.system(cmd % (logdir, 'train', AS))
@@ -323,4 +325,11 @@ def main(_):
     os.system('python eval_sampler.py --path "%s"' % logdir)
 
 if __name__ == '__main__':
-    tf.app.run(main)
+    while True:
+        try:
+            tf.app.run(main)
+        except:
+            continue
+        else:
+            break
+         

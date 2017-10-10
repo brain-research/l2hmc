@@ -26,16 +26,26 @@ import collections
 
 import tensorflow as tf
 import numpy as np
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, ortho_group
 
 def quadratic_gaussian(x, mu, S):
   return tf.diag_part(0.5 * tf.matmul(tf.matmul(x - mu, S), tf.transpose(x - mu)))
 
+def random_tilted_gaussian(dim, log_min=-2., log_max=2.):
+  mu = np.zeros((dim,))
+  R = ortho_group.rvs(dim)
+  sigma = np.diag(np.exp(np.log(10.) * np.random.uniform(log_min, log_max, size=(dim,)))) + 1e-6 * np.eye(dim)
+  S = R.T.dot(sigma).dot(R)
+  return Gaussian(mu, S)
+    
 class Gaussian(object):
   def __init__(self, mu, sigma):
     self.mu = mu
     self.sigma = sigma
-    self.i_sigma = np.linalg.inv(sigma)
+    
+    print(np.linalg.det(self.sigma), self.sigma.dtype)
+    
+    self.i_sigma = np.linalg.inv(np.copy(sigma))
 
   def get_energy_function(self):
     def fn(x, *args, **kwargs):
@@ -47,11 +57,27 @@ class Gaussian(object):
     return fn
 
   def get_samples(self, n):
-    return np.random.multivariate_normal(self.mu, self.sigma, size=(n,))
+    print(self.sigma.dtype)
+    S = self.sigma.astype('float64')
+    C = np.linalg.cholesky(S)
+    return np.random.multivariate_normal(self.mu.astype('float64'), S, size=(n,))
 
   def log_density(self, X):
     return multivariate_normal(mean=self.mu, cov=self.sigma).logpdf(X)
 
+class TiltedGaussian(Gaussian):
+  def __init__(self, dim, log_min, log_max):
+    self.R = ortho_group.rvs(dim)
+    self.diag = np.diag(np.exp(np.log(10.) * np.random.uniform(log_min, log_max, size=(dim,)))) + 1e-8 * np.eye(dim)
+    S = self.R.T.dot(self.diag).dot(self.R)
+    self.dim = dim
+    Gaussian.__init__(self, np.zeros((dim,)), S)
+    
+  def get_samples(self, n):
+    X = np.random.randn(200, self.dim)
+    X = X.dot(np.sqrt(self.diag))
+    X = X.dot(self.R)
+    return X
 
 class RoughWell(object):
   def __init__(self, dim, eps, easy=False):
