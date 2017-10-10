@@ -325,11 +325,5 @@ def main(_):
     os.system('python eval_sampler.py --path "%s"' % logdir)
 
 if __name__ == '__main__':
-    while True:
-        try:
-            tf.app.run(main)
-        except:
-            continue
-        else:
-            break
+    tf.app.run(main)
          
