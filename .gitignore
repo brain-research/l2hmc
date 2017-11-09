@@ -5,3 +5,4 @@ gpu*
 .ipynb_checkpoints/
 *.sh
 toy_tasks/
+*.npy
