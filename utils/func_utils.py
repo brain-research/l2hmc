@@ -132,3 +132,11 @@ def binarize_and_shuffle(x):
 
 def var_from_scope(scope_name):
     return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope_name)
+
+def acl_spectrum(X, scale):
+    n = X.shape[0]
+    return np.array([autocovariance(X / scale, tau=t) for t in range(n-1)])
+
+def ESS(A):
+    A = A * (A > 0.05)
+    return 1. / (1. + 2 * np.sum(A[1:]))

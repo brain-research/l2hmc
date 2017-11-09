@@ -57,10 +57,9 @@ class Gaussian(object):
     return fn
 
   def get_samples(self, n):
-    print(self.sigma.dtype)
-    S = self.sigma.astype('float64')
-    C = np.linalg.cholesky(S)
-    return np.random.multivariate_normal(self.mu.astype('float64'), S, size=(n,))
+    C = np.linalg.cholesky(self.sigma)
+    X = np.random.randn(n, self.sigma.shape[0])
+    return X.dot(C.T)
 
   def log_density(self, X):
     return multivariate_normal(mean=self.mu, cov=self.sigma).logpdf(X)

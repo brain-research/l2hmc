@@ -47,7 +47,7 @@ tf.app.flags.DEFINE_string('hparams', '', 'Comma sep list of name=value')
 
 DEFAULT_HPARAMS = tf.contrib.training.HParams(
     learning_rate=0.001,
-    epoch=100,
+    epoch=300,
     optimizer='adam',
     batch_size=512,
     latent_dim=50,

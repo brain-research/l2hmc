@@ -235,7 +235,7 @@ def main(_):
     elbo_train_op = opt.minimize(elbo, var_list=var_from_scope('encoder'))
     if not hps.hmc:
         gradients, variables = zip(*opt_sampler.compute_gradients(sampler_loss, var_list=var_from_scope('sampler')))
-        # gradients, global_norm = tf.clip_by_global_norm(gradients, 5.0)
+        gradients, global_norm = tf.clip_by_global_norm(gradients, 5.0)
         sampler_train_op = opt_sampler.apply_gradients(zip(gradients, variables))
         # sampler_train_op = opt_sampler.minimize(sampler_loss, var_list=var_from_scope('sampler'), global_step=global_step)
     else:
@@ -256,7 +256,7 @@ def main(_):
     loss_summaries = tf.summary.merge_all()
 
     # For sample generation
-    z_eval = tf.placeholder(tf.float32, shape=(None, 50))
+    z_eval = tf.placeholder(tf.float32, shape=(None, hps.latent_dim))
     x_eval = tf.nn.sigmoid(decoder(z_eval))
 
     samples_summary = tf.summary.image(
@@ -310,7 +310,7 @@ def main(_):
             counter += 1
         if e % hps.eval_samples_every == 0:
             saver.save(sess, '%s/model.ckpt' % logdir)
-            samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, 50)})
+            samples_summary_ = sess.run(samples_summary, {z_eval: np.random.randn(64, hps.latent_dim)})
             writer.add_summary(samples_summary_, global_step=(e / hps.eval_samples_every))
 
     for AS in [64, 256, 1024, 4096, 8192]:

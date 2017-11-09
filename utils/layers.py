@@ -23,8 +23,6 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-#from config import TF_FLOAT, NP_FLOAT
-
 TF_FLOAT = tf.float32
 NP_FLOAT = np.float32
 
@@ -38,17 +36,6 @@ class Linear(object):
   def __call__(self, x):
     return tf.add(tf.matmul(x, self.W), self.b)
 
-class ScaledTanh(object):
-  def __init__(self, in_, scope='scaled_tanh'):
-    with tf.variable_scope(scope):
-      self.scale = tf.exp(tf.get_variable(
-          'scale',
-          shape=(1, in_),
-          initializer=tf.constant_initializer(0., dtype=FLOAT_TYPE)
-      ))
-
-  def __call__(self, x):
-    return self.scale * tf.nn.tanh(x)
 
 class ConcatLinear(object):
   def __init__(self, ins_, out_, factors=None, scope='concat_linear'):
