@@ -57,6 +57,9 @@ class Gaussian(object):
     return fn
 
   def get_samples(self, n):
+    '''
+    Sampling is broken in numpy for d > 10
+    '''
     C = np.linalg.cholesky(self.sigma)
     X = np.random.randn(n, self.sigma.shape[0])
     return X.dot(C.T)
