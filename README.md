@@ -3,6 +3,7 @@
 TensorFlow open source implementation for training MCMC samplers from the paper:
 
 *Generalizing Hamiltonian Monte Carlo with Neural Network* [link](http://link)
+
 by [Daniel Levy](http://ai.stanford.edu/~danilevy), [Matt D. Hoffman](http://matthewdhoffman.com/) and [Jascha Sohl-Dickstein](sohldickstein.com)
 
 ---
