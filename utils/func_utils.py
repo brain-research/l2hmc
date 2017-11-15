@@ -52,28 +52,6 @@ def autocovariance(X, tau=0):
     s += np.sum(x1 * x2) / dN
 
   return s / (dT - tau)
-  
-# def autocovariance(X, tau=1):
-#   """
-#   """
-
-#   dT, dN, dX = X.shape
-
-#   Xf = np.fft(X, axis=0)
-#   Cf = Xf * np.conj(Xf)
-#   C = np.ifft(Cf)
-#   auto = np.mean(C, axis=[1,2])
-
-#   return auto
-
-#   for t in range(dT - tau):
-#     x1 = X[t, :, :]
-#     x2 = X[t+tau, :, :]
-#
-#     s += np.mean(x1 * x2)
-#     # s += np.trace(x1.dot(x2.T)) / dN
-#
-#   return s / (dT - tau)
 
 def jacobian(x, fx):
   return tf.transpose(tf.stack([tf.gradients(component, x)[0][0] for component in tf.unstack(fx[0])]))
@@ -138,5 +116,8 @@ def acl_spectrum(X, scale):
     return np.array([autocovariance(X / scale, tau=t) for t in range(n-1)])
 
 def ESS(A):
+  '''
+  Returns ESS given auto-correlation spectrum (following Hoffman and Gelman)
+  '''
     A = A * (A > 0.05)
     return 1. / (1. + 2 * np.sum(A[1:]))
