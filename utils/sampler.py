@@ -23,8 +23,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-from config import TF_FLOAT, NP_FLOAT
-
+TF_FLOAT = tf.float32
 
 def propose(x, dynamics, init_v=None, aux=None, do_mh_step=False, log_jac=False):
 	if dynamics.hmc:
