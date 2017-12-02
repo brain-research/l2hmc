@@ -116,8 +116,5 @@ def acl_spectrum(X, scale):
     return np.array([autocovariance(X / scale, tau=t) for t in range(n-1)])
 
 def ESS(A):
-  '''
-  Returns ESS given auto-correlation spectrum (following Hoffman and Gelman)
-  '''
     A = A * (A > 0.05)
     return 1. / (1. + 2 * np.sum(A[1:]))
