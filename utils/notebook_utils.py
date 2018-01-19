@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
-from dynamics import Dynamics
-from sampler import propose
+from utils.dynamics import Dynamics
+from utils.sampler import propose
 import matplotlib.pyplot as plt
 
 def plot_grid(S, width=8):
