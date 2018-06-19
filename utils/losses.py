@@ -48,12 +48,12 @@ def loss_inverse(x, X, p):
 
 def loss_std(x, X, p):
   v = loss_vec(x, X, p)
-  return - tf.reduce_mean(v, axis=0)
+  return - tf.reduce_mean(v, axis=0, name='loss_std')
 
 def loss_mixed(x, Lx, px, scale=1.0):
   v1 = loss_vec(x, Lx, px)
   v1 /= scale
   sampler_loss = 0.
-  sampler_loss += (tf.reduce_mean(1.0 / v1))
-  sampler_loss += (- tf.reduce_mean(v1))
+  sampler_loss += (tf.reduce_mean(1.0 / v1, name='loss_inv'))
+  sampler_loss += (- tf.reduce_mean(v1, name='loss_mixed'))
   return sampler_loss

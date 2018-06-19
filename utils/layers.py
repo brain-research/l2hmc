@@ -23,18 +23,34 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
+from .logging import variable_summaries
+
 TF_FLOAT = tf.float32
 NP_FLOAT = np.float32
 
 class Linear(object):
   def __init__(self, in_, out_, scope='linear', factor=1.0):
     with tf.variable_scope(scope):
-      initializer = tf.contrib.layers.variance_scaling_initializer(factor=factor * 2.0, mode='FAN_IN', uniform=False, dtype=TF_FLOAT)
-      self.W = tf.get_variable('W', shape=(in_, out_), initializer=initializer)
-      self.b = tf.get_variable('b', shape=(out_,), initializer=tf.constant_initializer(0., dtype=TF_FLOAT))
+      initializer = tf.contrib.layers.variance_scaling_initializer(
+          factor=factor * 2.0, mode='FAN_IN', uniform=False, dtype=TF_FLOAT
+      )
+      with tf.name_scope('weights'):
+          self.W = tf.get_variable(
+              'W', shape=(in_, out_), initializer=initializer
+          )
+          variable_summaries(self.W)
+      with tf.name_scope('biases'):
+          self.b = tf.get_variable(
+              'b', shape=(out_,),
+              initializer=tf.constant_initializer(0., dtype=TF_FLOAT)
+          )
+          variable_summaries(self.b)
 
   def __call__(self, x):
-    return tf.add(tf.matmul(x, self.W), self.b)
+      self.activations = tf.add(tf.matmul(x, self.W), self.b)
+      #  tf.summary.histogram('activations', self.activations)
+      #return tf.add(tf.matmul(x, self.W), self.b)
+      return self.activations
 
 
 class ConcatLinear(object):
@@ -68,10 +84,10 @@ class Parallel(object):
 class Sequential(object):
   def __init__(self, layers = []):
     self.layers = layers
-        
+
   def add(self, layer):
     self.layers.append(layer)
-        
+
   def __call__(self, x):
     y = x
     for layer in self.layers:
@@ -84,11 +100,11 @@ class ScaleTanh(object):
       self.scale = tf.exp(tf.get_variable('scale', shape=(1, in_), initializer=tf.constant_initializer(0., dtype=TF_FLOAT)))
   def __call__(self, x):
     return self.scale * tf.nn.tanh(x)
-    
+
 class Zip(object):
   def __init__(self, layers=[]):
     self.layers = layers
-    
+
   def __call__(self, x):
     assert len(x) == len(self.layers)
     n = len(self.layers)
