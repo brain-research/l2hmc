@@ -34,17 +34,19 @@ def quadratic_gaussian(x, mu, S):
 def random_tilted_gaussian(dim, log_min=-2., log_max=2.):
   mu = np.zeros((dim,))
   R = ortho_group.rvs(dim)
-  sigma = np.diag(np.exp(np.log(10.) * np.random.uniform(log_min, log_max, size=(dim,)))) + 1e-6 * np.eye(dim)
+  sigma = (np.diag(np.exp(np.log(10.) * np.random.uniform(log_min, log_max,
+                                                         size=(dim,))))
+           + 1e-6 * np.eye(dim))
   S = R.T.dot(sigma).dot(R)
   return Gaussian(mu, S)
-    
+
 class Gaussian(object):
   def __init__(self, mu, sigma):
     self.mu = mu
     self.sigma = sigma
-    
+
     print(np.linalg.det(self.sigma), self.sigma.dtype)
-    
+
     self.i_sigma = np.linalg.inv(np.copy(sigma))
 
   def get_energy_function(self):
@@ -139,7 +141,7 @@ class GMM(object):
 
     samples = []
 
-    for k, v in counter_samples.iteritems():
+    for k, v in counter_samples.items():
       samples.append(np.random.multivariate_normal(self.mus[k], self.sigmas[k], size=(v,)))
 
     samples = np.concatenate(samples, axis=0)
