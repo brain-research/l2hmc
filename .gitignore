@@ -6,3 +6,4 @@ gpu*
 *.sh
 toy_tasks/
 *.npy
+log_mog_tf/*
