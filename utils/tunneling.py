@@ -1,0 +1,67 @@
+import numpy as np
+
+def distance(pt1, pt2):
+    d = pt2 - pt1
+    return np.sqrt(d.T.dot(d))
+
+def calc_min_distance(means, cov):
+    idxs = [(i, j) for i in range(len(means) - 1, 0, -1)
+            for j in range(len(means) - 1) if i > j]
+    min_dist = []
+    for pair in idxs:
+        _vec = means[pair[1]] - means[pair[0]]
+        _dist = np.sqrt(_vec.T.dot(_vec))
+        _unit_vec = np.sqrt(cov) * _vec / _dist
+        p0 = means[pair[0]] + _unit_vec
+        p1 = means[pair[1]] - _unit_vec
+        _diff = p1 - p0
+        _min_dist = np.sqrt(_diff.T.dot(_diff))
+        min_dist.append(_min_dist)
+    return min(min_dist)
+
+def calc_tunneling_rate(trajectory, min_distance):
+    idxs = [(i, i+1) for i in range(len(trajectory) - 1)]
+    #min_distance = calc_min_dist(means, cov)
+    tunneling_events = {}
+    num_events = 0
+    for pair in idxs:
+        _distance = distance(trajectory[pair[0]], trajectory[pair[1]])
+        if _distance >= min_distance:
+            tunneling_events[pair] = _distance
+            num_events += 1
+    tunneling_rate = num_events / (len(trajectory) - 1)
+    return tunneling_events, tunneling_rate
+
+def match_distribution(x, means):
+    """Given a point x and multiple unique normal distributions (each with their
+    own respective mean), try to identify which distribution the point x
+    belongs to.
+
+    Args:
+        point (scalar or array-like):
+            Point belonging to some unknown distribution.
+        means (array-like):
+            Array containing the mean vectors of different normal
+            distributions.
+    """
+    norm_diff_arr = []
+    for mean in means:
+        diff = x - mean
+        norm_diff = np.sqrt(np.dot(diff.T, diff))
+        norm_diff_arr.append(norm_diff)
+    return np.argmin(np.array(norm_diff_arr))
+
+def find_tunneling_events(trajectory, means):
+    idxs = [(i, i+1) for i in range(len(trajectory) - 1)]
+    tunneling_events = {}
+    num_events = 0
+    for pair in idxs:
+        x0 = trajectory[pair[0]]
+        x1 = trajectory[pair[1]]
+        dist0 = match_distribution(x0, means)
+        dist1 = match_distribution(x1, means)
+        if dist1 != dist0:
+            tunneling_events[pair] = [x0, x1]
+            num_events += 1
+    tunneling_rate = num_events / (len(trajectory) - 1)
+    return tunneling_events, tunneling_rate
