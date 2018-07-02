@@ -2,7 +2,7 @@
 
 TensorFlow open source implementation for training MCMC samplers from the paper:
 
-[*Generalizing Hamiltonian Monte Carlo with Neural Network*](https://arxiv.org/abs/1711.09268)
+[*Generalizing Hamiltonian Monte Carlo with Neural Networks*](https://arxiv.org/abs/1711.09268)
 
 by [Daniel Levy](http://ai.stanford.edu/~danilevy), [Matt D. Hoffman](http://matthewdhoffman.com/) and [Jascha Sohl-Dickstein](sohldickstein.com)
 
@@ -24,8 +24,8 @@ If you use this code, please cite our paper:
 @article{levy2017generalizing,
   title={Generalizing Hamiltonian Monte Carlo with Neural Networks},
   author={Levy, Daniel and Hoffman, Matthew D. and Sohl-Dickstein, Jascha},
-  journal={arXiv preprint arXiv:1711.09268},
-  year={2017}
+  journal={International Conference on Learning Representations},
+  year={2018}
 }
 ```
 
