@@ -40,12 +40,14 @@ class Dynamics(object):
                hmc=False,
                net_factory=None,
                eps_trainable=True,
-               use_temperature=False):
+               use_temperature=False,
+               log_trajectory=False):
 
     self.x_dim = x_dim
     self.use_temperature = use_temperature
+    self.log_trajectory = log_trajectory
     self.temperature = tf.placeholder(TF_FLOAT, shape=())
-    
+
     if not hmc:
         alpha = tf.get_variable(
             'alpha',
@@ -61,7 +63,7 @@ class Dynamics(object):
     self.hmc = hmc
 
     self._init_mask()
-    
+
     # m = np.zeros((x_dim,))
     # m[np.arange(0, x_dim, 2)] = 1
     # mb = 1 - m
@@ -80,18 +82,18 @@ class Dynamics(object):
       # self.Sv, self.Tv, self.Fv = self.VNet.S, self.VNet.T, self.VNet.F
       # self.Sx, self.Tx, self.Fx = self.XNet.S, self.XNet.T, self.XNet.F
 
-    
+
   def _init_mask(self):
     mask_per_step = []
-    
+
     for t in range(self.T):
         ind = np.random.permutation(np.arange(self.x_dim))[:int(self.x_dim / 2)]
         m = np.zeros((self.x_dim,))
         m[ind] = 1
         mask_per_step.append(m)
-    
+
     self.mask = tf.constant(np.stack(mask_per_step), dtype=TF_FLOAT)
-    
+
   def _get_mask(self, step):
     m = tf.gather(self.mask, tf.cast(step, dtype=tf.int32))
     return m, 1.-m
@@ -114,43 +116,51 @@ class Dynamics(object):
 
   def _forward_step(self, x, v, step, aux=None):
     t = self._format_time(step, tile=tf.shape(x)[0])
-    
+
     grad1 = self.grad_energy(x, aux=aux)
     S1 = self.VNet([x, grad1, t, aux])
-    
+
     sv1 = 0.5 * self.eps * S1[0]
     tv1 = S1[1]
     fv1 = self.eps * S1[2]
 
-    v_h = tf.multiply(v, safe_exp(sv1, name='sv1F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1F'), grad1) + tv1)
+    v_h = (tf.multiply(v, safe_exp(sv1, name='sv1F'))
+           + 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1F'),
+                                            grad1) + tv1))
 
     m, mb = self._get_mask(step)
-    
+
     # m, mb = self._gen_mask(x)
-    
+
     X1 = self.XNet([v_h, m * x, t, aux])
-    
+
     sx1 = (self.eps * X1[0])
     tx1 = X1[1]
     fx1 = self.eps * X1[2]
 
-    y = m * x + mb * (tf.multiply(x, safe_exp(sx1, name='sx1F')) + self.eps * (tf.multiply(safe_exp(fx1, name='fx1F'), v_h) + tx1))
-    
+    y = (m * x + mb * (tf.multiply(x, safe_exp(sx1, name='sx1F'))
+                       + self.eps * (tf.multiply(safe_exp(fx1, name='fx1F'),
+                                                 v_h) + tx1)))
+
     X2 = self.XNet([v_h, mb * y, t, aux])
 
     sx2 = (self.eps * X2[0])
     tx2 = X2[1]
     fx2 = self.eps * X2[2]
 
-    x_o = mb * y + m * (tf.multiply(y, safe_exp(sx2, name='sx2F')) + self.eps * (tf.multiply(safe_exp(fx2, name='fx2F'), v_h) + tx2))
-    
+    x_o = (mb * y + m * (tf.multiply(y, safe_exp(sx2, name='sx2F'))
+                         + self.eps * (tf.multiply(safe_exp(fx2, name='fx2F'),
+                                                   v_h) + tx2)))
+
     S2 = self.VNet([x_o, self.grad_energy(x_o, aux=aux), t, aux])
     sv2 = (0.5 * self.eps * S2[0])
     tv2 = S2[1]
     fv2 = self.eps * S2[2]
-    
+
     grad2 = self.grad_energy(x_o, aux=aux)
-    v_o = tf.multiply(v_h, safe_exp(sv2, name='sv2F')) + 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2F'), grad2) + tv2)
+    v_o = (tf.multiply(v_h, safe_exp(sv2, name='sv2F'))
+           + 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2F'),
+                                            grad2) + tv2))
 
     log_jac_contrib = tf.reduce_sum(sv1 + sv2 + mb * sx1 + m * sx2, axis=1)
 
@@ -158,45 +168,56 @@ class Dynamics(object):
 
   def _backward_step(self, x_o, v_o, step, aux=None):
     t = self._format_time(step, tile=tf.shape(x_o)[0])
-    
+
     grad1 = self.grad_energy(x_o, aux=aux)
-    
+
     S1 = self.VNet([x_o, grad1, t, aux])
-    
+
     sv2 = (-0.5 * self.eps * S1[0])
     tv2 = S1[1]
     fv2 = self.eps * S1[2]
 
-    v_h = tf.multiply((v_o - 0.5 * self.eps * (-tf.multiply(safe_exp(fv2, name='fv2B'), grad1) + tv2)), safe_exp(sv2, name='sv2B'))
+    v_h = (tf.multiply((v_o - 0.5 * self.eps
+                        * (-tf.multiply(safe_exp(fv2, name='fv2B'), grad1)
+                           + tv2)), safe_exp(sv2, name='sv2B')))
 
     m, mb = self._get_mask(step)
-    
+
     # m, mb = self._gen_mask(x_o)
-    
+
     X1 = self.XNet([v_h, mb * x_o, t, aux])
-    
+
     sx2 = (-self.eps * X1[0])
     tx2 = X1[1]
     fx2 = self.eps * X1[2]
 
-    y = mb * x_o + m * tf.multiply(safe_exp(sx2, name='sx2B'), (x_o - self.eps * (tf.multiply(safe_exp(fx2, name='fx2B'), v_h) + tx2)))
-    
+    y = (mb * x_o + m * tf.multiply(safe_exp(sx2, name='sx2B'),
+                                    (x_o - self.eps * (tf.multiply(
+                                        safe_exp(fx2, name='fx2B'), v_h)
+                                        + tx2))))
+
     X2 = self.XNet([v_h, m * y, t, aux])
-    
+
     sx1 = (-self.eps * X2[0])
     tx1 = X2[1]
     fx1 = self.eps * X2[2]
 
-    x = m * y + mb * tf.multiply(safe_exp(sx1, name='sx1B'), (y - self.eps * (tf.multiply(safe_exp(fx1, name='fx1B'), v_h) + tx1)))
-    
+    x = m * y + mb * tf.multiply(safe_exp(sx1, name='sx1B'),
+                                 (y - self.eps * (tf.multiply(
+                                     safe_exp(fx1, name='fx1B'), v_h) + tx1)
+                                 ))
+
     grad2 = self.grad_energy(x, aux=aux)
     S2 = self.VNet([x, grad2, t, aux])
-    
+
     sv1 = (-0.5 * self.eps * S2[0])
     tv1 = S2[1]
     fv1 = self.eps * S2[2]
 
-    v = tf.multiply(safe_exp(sv1, name='sv1B'), (v_h - 0.5 * self.eps * (-tf.multiply(safe_exp(fv1, name='fv1B'), grad2) + tv1)))
+    v = tf.multiply(safe_exp(sv1, name='sv1B'),
+                    (v_h - 0.5 * self.eps * (-tf.multiply(
+                        safe_exp(fv1, name='fv1B'), grad2) + tv1)
+                    ))
 
     return x, v, tf.reduce_sum(sv1 + sv2 + mb * sx1 + m * sx2, axis=1)
 
@@ -307,4 +328,3 @@ class Dynamics(object):
     p = tf.exp(tf.minimum(v, 0.0))
 
     return tf.where(tf.is_finite(p), p, tf.zeros_like(p))
-

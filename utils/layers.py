@@ -63,8 +63,8 @@ class ConcatLinear(object):
           factor = 1.0
         else:
           factor = factors[i]
-
-        self.layers.append(Linear(in_, out_, scope='linear_%d' % i, factor=factor))
+        self.layers.append(Linear(in_, out_, scope='linear_%d' % i,
+                                  factor=factor))
 
   def __call__(self, inputs):
     output = 0.
