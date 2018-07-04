@@ -6,6 +6,7 @@ import functools
 import argparse
 import sys
 import os
+import pickle
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
 from mpl_toolkits.mplot3d import Axes3D
@@ -63,6 +64,19 @@ params = {
     'logging_steps': LOGGING_STEPS
 }
 
+def lazy_property(function):
+    attribute = '_cache_' + function.__name__
+
+    @property
+    @functools.wraps(function)
+    def decorator(self):
+        if not hasattr(self, attribute):
+            setattr(self, attribute, function(self))
+        return getattr(self, attribute)
+
+    return decorator
+
+
 def network(x_dim, scope, factor):
     with tf.variable_scope(scope):
         net = Sequential([
@@ -89,36 +103,6 @@ def network(x_dim, scope, factor):
             ])
         ])
     return net
-
-def network1(x_dim, scope, factor, hidden_nodes=10):
-    with tf.variable_scope(scope):
-        net = Sequential([
-            Zip([
-                Linear(x_dim, hidden_nodes, scope='embed_1', factor=1.0/3),
-                Linear(x_dim, hidden_nodes, scope='embed_2', factor=factor*1.0/3),
-                Linear(2, hidden_nodes, scope='embed_3', factor=1.0/3),
-                lambda _: 0.,
-            ]),
-            sum,
-            tf.nn.relu,
-            Linear(hidden_nodes, hidden_nodes, scope='linear_1'),
-            tf.nn.relu,
-            Parallel([
-                Sequential([
-                    Linear(hidden_nodes, x_dim, scope='linear_s', factor=0.001),
-                    ScaleTanh(x_dim, scope='scale_s')
-                ]),
-                Linear(hidden_nodes, x_dim, scope='linear_t', factor=0.001),
-                Sequential([
-                    Linear(10, x_dim, scope='linear_f', factor=0.001),
-                    ScaleTanh(x_dim, scope='scale_f'),
-                ])
-            ])
-
-        ])
-    return net
-
-
 
 def plot_trajectory_and_distribution(samples, trajectory, x_dim=None):
     if samples.shape[1] == 3:
@@ -157,6 +141,7 @@ class GaussianMixtureModel(object):
                 if not os.path.isdir(self.figs_dir):
                     os.makedirs(self.figs_dir)
 
+
         self.x_dim = params.get('x_dim', 3)
         self.lr_init = params.get('lr_init', 1e-3)
         self.lr_decay_steps = params.get('lr_decay_steps', 1000)
@@ -187,12 +172,14 @@ class GaussianMixtureModel(object):
         self.training_samples = []
         self.tunneling_info = []
         self.temp_arr = []
-        #  self.global_step = tf.get_variable('global_step',
-        #                                     initializer=tf.constant(0),
-        #                                     trainable=False)
-        #  if log_dir is None:
-        self.global_step = tf.Variable(tf.constant(0), name='global_step',
-                                       trainable=False)
+        self.steps_arr = []
+
+        self.tunneling_events_all_file = (self.info_dir +
+                                     'tunneling_events_all.pkl')
+        self.tunneling_rates_all_file = (self.info_dir +
+                                    'tunneling_rates_all.pkl')
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         tf.add_to_collection('global_step', self.global_step)
         self.learning_rate = tf.train.exponential_decay(self.lr_init,
                                                         self.global_step,
@@ -201,10 +188,10 @@ class GaussianMixtureModel(object):
                                                         staircase=True)
 
     def plot_tunneling_rates(self):
-        tunneling_info_arr = np.array(self.tunneling_info)
-        step_nums = tunneling_info_arr[:, 0]
+        #  tunneling_info_arr = np.array(self.tunneling_info)
+        #  step_nums = tunneling_info_arr[:, 0]
         fig, ax = plt.subplots()
-        ax.errorbar(step_nums, self.tunneling_rates_avg_all,
+        ax.errorbar(self.steps_arr, self.tunneling_rates_avg_all,
                     yerr=self.tunneling_rates_err_all, capsize=1.5,
                     capthick=1.5, color='C0', marker='.', ls='-',
                     fillstyle='none')
@@ -226,7 +213,8 @@ class GaussianMixtureModel(object):
         #ax.set_ylim((-0.05, 1.))
         fig.tight_layout()
         out_file = (self.figs_dir +
-                    f'3D_tunneling_rate_vs_step_num_{int(step_nums[-1])}.png')
+                    f'3D_tunneling_rate_vs_step_num_{int(self.steps_arr[-1])}'
+                    + '.png')
         print(f'Saving figure to: {out_file}')
         fig.savefig(out_file, dpi=400, bbox_inches='tight')
         return fig, ax
@@ -256,20 +244,16 @@ class GaussianMixtureModel(object):
                                  net_factory=network,
                                  use_temperature=use_temperature)
 
-    #  def _propose(self, x, z, dynamics):
-    #      Lx, _, px, output = propose(x, dynamics, do_mh_step=True)
-    #      Lz, _, pz, _ = propose(z, dynamics, do_mh_step=False)
-    #      return Lx, px, output, Lz, pz
-
     def _create_loss(self):
         with tf.name_scope('loss'):
-            self.x = tf.placeholder(tf.float32, shape=(None, self.x_dim))
-            self.z = tf.random_normal(tf.shape(self.x))
+            self.x = tf.placeholder(tf.float32, shape=(None, self.x_dim),
+                                    name='x')
+            self.z = tf.random_normal(tf.shape(self.x), name='z')
             self.Lx, _, self.px, self.output = propose(self.x, self.dynamics,
                                                        do_mh_step=True)
             self.Lz, _, self.pz, _ = propose(self.z, self.dynamics,
                                              do_mh_step=False)
-            self.loss = 0.0
+            self.loss = tf.Variable(0., trainable=False, name='loss')
             v1 = ((tf.reduce_sum(tf.square(self.x - self.Lx), axis=1) * self.px)
                   + 1e-4)
             v2 = ((tf.reduce_sum(tf.square(self.z - self.Lz), axis=1) * self.pz)
@@ -284,7 +268,8 @@ class GaussianMixtureModel(object):
         with tf.name_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
             self.train_op = optimizer.minimize(self.loss,
-                                               global_step=self.global_step)
+                                               global_step=self.global_step,
+                                               name='train_op')
 
     def _create_summaries(self):
         with tf.name_scope('summaries'):
@@ -309,6 +294,37 @@ class GaussianMixtureModel(object):
                      f"\ncovs:\n\n {str(self.covs)}\n"))
         print(f'params file written to: {params_file}')
 
+    def _save_variables(self):
+        with open(self.tunneling_events_all_file, 'wb') as f:
+            pickle.dump(self.tunneling_events_all, f)
+        with open(self.tunneling_rates_all_file, 'wb') as f:
+            pickle.dump(self.tunneling_rates_all, f)
+        np.save(self.info_dir + 'steps_array', np.array(self.steps_arr))
+        np.save(self.info_dir + 'training_samples',
+                np.array(self.training_samples))
+        np.save(self.info_dir + 'temp_array',
+                np.array(self.temp_arr))
+        np.save(self.info_dir + 'tunneling_info',
+                self.tunneling_info)
+        np.save(self.info_dir + 'means', self.means)
+        np.save(self.info_dir + 'covariances', self.covs)
+
+    def _load_variables(self):
+        self.temp_arr = list(np.load(self.info_dir + 'temp_array.npy'))
+        self.training_samples = list(np.load(self.info_dir +
+                                        'training_samples.npy'))
+        self.tunneling_info = list(np.load(self.info_dir +
+                                      'tunneling_info.npy'))
+        self.means = np.load(self.info_dir + 'means.npy')
+        self.covs = np.load(self.info_dir + 'covariances.npy')
+        self.temp = self.temp_arr[-1]
+        self.steps_arr = list(np.load(self.info_dir + 'steps_array.npy'))
+
+        with open(self.tunneling_rates_all_file, 'rb') as f:
+            self.tunneling_rates_all = pickle.load(f)
+        with open(self.tunneling_events_all_file, 'rb') as f:
+            self.tunneling_events_all = pickle.load(f)
+
     def build_graph(self):
         """Build the graph for our model."""
         if self.log_dir is None:
@@ -318,7 +334,6 @@ class GaussianMixtureModel(object):
         self._create_loss()
         self._create_optimizer()
         self._create_summaries()
-
         self._create_params_file()
 
     def generate_trajectories(self, sess):
@@ -366,7 +381,7 @@ class GaussianMixtureModel(object):
         return avg_tr_vals, avg_tr_errs
 
     def train(self, num_train_steps, config=None):
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep=3)
         initial_step = 0
         with tf.Session(config=config) as sess:
             sess.run(tf.global_variables_initializer())
@@ -377,13 +392,7 @@ class GaussianMixtureModel(object):
                 saver.restore(sess, ckpt.model_checkpoint_path)
                 self.global_step = tf.train.get_global_step()
                 initial_step = sess.run(self.global_step)
-                #  self._create_dynamics(T=10, eps=self.eps, use_temperature=True)
-                #  self._create_loss()
-                #initial_step = self.global_step.eval()
-                #  import pdb
-                #  pdb.set_trace()
-            #  else:
-                #  self.global_step = tf.get_collection_ref('global_step')[0]
+                self._load_variables()
 
             writer = tf.summary.FileWriter(self.log_dir, sess.graph)
             #initial_step = int(self.global_step.eval())
@@ -407,7 +416,7 @@ class GaussianMixtureModel(object):
                     summary_str = sess.run(self.summary_op, feed_dict=feed_dict)
                     writer.add_summary(summary_str, global_step=step)
                     writer.flush()
-                    print(f"Step: {step} / {num_train_steps}, "
+                    print(f"Step: {step} / {initial_step + num_train_steps}, "
                           f"Loss: {loss_:.4e}, "
                           f"Acceptance sample: {np.mean(px_):.2f}, "
                           f"LR: {lr_:.5f}, "
@@ -421,6 +430,7 @@ class GaussianMixtureModel(object):
 
                 if (step + 1) % self.tunneling_rate_steps == 0:
                     self.temp_arr.append(self.temp)
+                    self.steps_arr.append(step+1)
 
                     trajectories = self.generate_trajectories(sess)
                     self.training_samples.append(trajectories)
@@ -440,16 +450,10 @@ class GaussianMixtureModel(object):
                     print(f"\n\t Step: {step}, "
                           f"Tunneling rate avg: {tunneling_rate_avg}, "
                           f"Tunnneling rate std: {tunneling_rate_std}\n")
+                    #  import pdb
+                    #  pdb.set_trace()
                     self.plot_tunneling_rates()
-
-                    np.save(self.info_dir + 'training_samples',
-                            np.array(self.training_samples))
-                    np.save(self.info_dir + 'temp_array',
-                            np.array(self.temp_arr))
-                    np.save(self.info_dir + 'tunneling_info',
-                            self.tunneling_info)
-                    np.save(self.info_dir + 'means', self.means)
-                    np.save(self.info_dir + 'covariances', self.covs)
+                    self._save_variables()
 
                 if (step + 1) % self.save_steps == 0:
                     ckpt_file = os.path.join(self.log_dir, 'model.ckpt')
@@ -458,35 +462,42 @@ class GaussianMixtureModel(object):
             writer.close()
 
 
-def main(args=None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-n", "--n_steps", type=int, required='True',
-                        help="Define the number of training steps. (Default:"
-                        "10000)")
-    parser.add_argument("-d", "--dir", type=str, required='False',
+def main(args):
+    if args.log_dir:
+        model = GaussianMixtureModel(params, log_dir=args.log_dir)
+    else:
+        model = GaussianMixtureModel(params)
+    if args.num_steps:
+        num_train_steps = args.num_steps
+    else:
+        num_train_steps = 10000
+
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    model.build_graph()
+    model.train(num_train_steps, config=config)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description=('L2HMC model using Mixture of Gaussians '
+                     'for target distribution')
+    )
+    parser.add_argument("-n", "--num_steps", default=10000, type=int,
+                        required=True, help="Define the number of training"
+                        "steps. (Default: 10000)")
+    parser.add_argument("--log_dir", type=str, required=False,
                         help="Define the log dir to use if restoring from"
                         "previous run (Default: None)")
     args = parser.parse_args()
 
-    if args.n_steps is  not None:
-        num_train_steps = args.n_steps
-    else:
-        num_train_steps = 10000
+    #if args.n_steps is  not None:
+    #    num_train_steps = args.n_steps
+    #else:
+    #    num_train_steps = 10000
 
-    if args.dir is not None:
-        log_dir = args.dir
-    else:
-        log_dir = None
-
-
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    model = GaussianMixtureModel(params, log_dir=log_dir)
-    #  if log_dir is None:
-    model.build_graph()
-    #  else:
-    model.train(num_train_steps, config=config)
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
-    #main()
+    #if args.dir is not None:
+    #    log_dir = args.dir
+    #else:
+    #    log_dir = None
+    main(args)
