@@ -7,3 +7,5 @@ gpu*
 toy_tasks/
 *.npy
 log_mog_tf/*
+old_logs/*
+Untitled.ipynb
