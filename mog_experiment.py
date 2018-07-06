@@ -27,14 +27,14 @@ X_DIM = 3
 LR_INIT = 1e-3
 LR_DECAY_RATE = 0.96
 TEMP_INIT = 10
-ANNEALING_RATE = 0.98
+ANNEALING_RATE = 0.99
 EPS = 0.1
 SCALE = 0.1
 NUM_SAMPLES = 200
 TRAIN_TRAJECTORY_LENGTH = 2000
 NUM_TRAINING_STEPS = 10000
 LR_DECAY_STEPS = 1000
-ANNEALING_STEPS = 100
+ANNEALING_STEPS = 50
 LOGGING_STEPS = 50
 TUNNELING_RATE_STEPS = 500
 SAVE_STEPS = 2500
@@ -308,6 +308,10 @@ class GaussianMixtureModel(object):
                 self.tunneling_info)
         np.save(self.info_dir + 'means', self.means)
         np.save(self.info_dir + 'covariances', self.covs)
+        np.save(self.info_dir + 'tunneling_rates_avg_all',
+                np.array(self.tunneling_rates_avg_all))
+        np.save(self.info_dir + 'tunneling_rates_err_all',
+                np.array(self.tunneling_rates_err_all))
 
     def _load_variables(self):
         self.temp_arr = list(np.load(self.info_dir + 'temp_array.npy'))
@@ -319,6 +323,12 @@ class GaussianMixtureModel(object):
         self.covs = np.load(self.info_dir + 'covariances.npy')
         self.temp = self.temp_arr[-1]
         self.steps_arr = list(np.load(self.info_dir + 'steps_array.npy'))
+        self.tunneling_rates_avg_all = list(np.load(
+            self.info_dir + 'tunneling_rates_avg_all.npy'
+        ))
+        self.tunneling_rates_err_all = list(np.load(
+            self.info_dir + 'tunneling_rates_err_all.npy'
+        ))
 
         with open(self.tunneling_rates_all_file, 'rb') as f:
             self.tunneling_rates_all = pickle.load(f)
@@ -463,6 +473,10 @@ class GaussianMixtureModel(object):
 
 
 def main(args):
+    if args.annealing_steps:
+        ANNEALING_STEPS = args.annealing_steps
+    if args.annealing_rate:
+        ANNEALING_RATE = args.annealing_rate
     if args.log_dir:
         model = GaussianMixtureModel(params, log_dir=args.log_dir)
     else:
@@ -486,6 +500,11 @@ if __name__ == '__main__':
     parser.add_argument("-n", "--num_steps", default=10000, type=int,
                         required=True, help="Define the number of training"
                         "steps. (Default: 10000)")
+    parser.add_argument("--annealing_steps", default=100, type=int,
+                        required=False, help="Number of annealing steps."
+                        "(Default: 100)")
+    parser.add_argument("--annealing_rate", default=0.98, type=float,
+                        required=False, help="Annealing rate. (Default: 0.98)")
     parser.add_argument("--log_dir", type=str, required=False,
                         help="Define the log dir to use if restoring from"
                         "previous run (Default: None)")
