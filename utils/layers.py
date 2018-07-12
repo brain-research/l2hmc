@@ -36,7 +36,8 @@ class Linear(object):
       )
       with tf.name_scope('weights'):
           self.W = tf.get_variable(
-              'W', shape=(in_, out_), initializer=initializer
+              'W', shape=(in_, out_), initializer=initializer,
+
           )
           variable_summaries(self.W)
       with tf.name_scope('biases'):

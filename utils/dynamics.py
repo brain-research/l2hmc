@@ -46,7 +46,7 @@ class Dynamics(object):
     self.x_dim = x_dim
     self.use_temperature = use_temperature
     self.log_trajectory = log_trajectory
-    self.temperature = tf.placeholder(TF_FLOAT, shape=())
+    self.temperature = tf.placeholder(TF_FLOAT, shape=(), name='temperature')
 
     if not hmc:
         alpha = tf.get_variable(
