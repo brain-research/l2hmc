@@ -12,7 +12,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 from mpl_toolkits.mplot3d import Axes3D
 from utils.func_utils import accept, jacobian, autocovariance,\
         get_log_likelihood, binarize, normal_kl, acl_spectrum, ESS
-from utils.distributions import GMM 
+from utils.distributions import GMM
 from utils.layers import Linear, Sequential, Zip, Parallel, ScaleTanh
 from utils.dynamics import Dynamics
 from utils.sampler import propose
@@ -22,12 +22,21 @@ from utils.tunneling import distance, calc_min_distance, calc_tunneling_rate,\
         find_tunneling_events
 from utils.jackknife import block_resampling, jackknife_err
 
+# increase dimensionality until learrning slows to a crawl
+# see how each of the Q, S, and T functions impacts learning rate and so on
+# number of learning steps isn't limiting factor, concerned more with final
+# results and eventual tunneling rate instead of intermediate tunneling rates
+
+# look at scaling with dimensionality, look at implementing simple U2 model
+# into distributions and see if any unforseen prooblems arise. 
+
 # Model hyperparameters
-X_DIM = 3
+X_DIM = 4
+NUM_DISTRIBUTIONS = 2
 LR_INIT = 1e-3
 LR_DECAY_RATE = 0.96
-TEMP_INIT = 10
-ANNEALING_RATE = 0.99
+TEMP_INIT = 20
+ANNEALING_RATE = 0.98
 EPS = 0.1
 SCALE = 0.1
 NUM_SAMPLES = 200
@@ -38,14 +47,22 @@ ANNEALING_STEPS = 50
 LOGGING_STEPS = 50
 TUNNELING_RATE_STEPS = 500
 SAVE_STEPS = 2500
-MEANS = np.array([[np.sqrt(2), 0.0, 0.0],
-                  [0.0, np.sqrt(2), 0.0],
-                  [np.sqrt(2), 0.0, 0.0]]).astype(np.float32)
+MEANS = np.zeros((X_DIM, X_DIM), dtype=np.float32)
+for i in range(NUM_DISTRIBUTIONS):
+    MEANS[i::NUM_DISTRIBUTIONS, i] = np.sqrt(2)
+#MEANS = np.array([[np.sqrt(2), 0.0, 0.0, 0.0],
+#                  [0.0, np.sqrt(2), 0.0, 0.0],
+#                  [np.sqrt(2), 0.0, 0.0, 0.0],
+#                  [0.0, np.sqrt(2), 0.0, 0.0]]).astype(np.float32)
+#MEANS = np.array([[np.sqrt(2), 0.0, 0.0],
+#                  [0.0, np.sqrt(2), 0.0],
+#                  [np.sqrt(2), 0.0, 0.0]]).astype(np.float32)
 SIGMA = 0.05
 SMALL_PI = 2e-16
 
 params = {
     'x_dim': X_DIM,
+    'num_distributions': NUM_DISTRIBUTIONS,
     'lr_init': LR_INIT,
     'temp_init': TEMP_INIT,
     'annealing_rate': ANNEALING_RATE,
@@ -63,6 +80,14 @@ params = {
     'save_steps': SAVE_STEPS,
     'logging_steps': LOGGING_STEPS
 }
+
+def distribution_arr(x_dim, n_distributions):
+    big_pi = (1.0 / n_distributions) - 1E-16
+    arr = n_distributions * [big_pi]
+    small_pi = (1 - sum(arr)) / (x_dim - n_distributions)
+    arr.extend((x_dim - n_distributions) * [small_pi])
+    arr = np.array(arr, dtype=np.float32)
+    return arr
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__
@@ -143,6 +168,7 @@ class GaussianMixtureModel(object):
 
 
         self.x_dim = params.get('x_dim', 3)
+        self.num_distributions = params.get('num_distributions', 2)
         self.lr_init = params.get('lr_init', 1e-3)
         self.lr_decay_steps = params.get('lr_decay_steps', 1000)
         self.lr_decay_rate = params.get('lr_decay_rate', 0.96)
@@ -198,10 +224,11 @@ class GaussianMixtureModel(object):
         ax.set_ylabel('Tunneling rate')#, fontsize=16)
         ax.set_xlabel('Training step')#, fontsize=16)
         #ax.legend(loc='best')#, markerscale=1.5), fontsize=12)
+        str0 = f"""dim: {self.x_dim};  """
         str1 = r"""$\mathcal{N}_1(\sqrt{2}\hat x; {{self.sigma}}), $"""
         str2 = r"""$\mathcal{N}_2(\sqrt{2}\hat y; {{self.sigma}}),$ """
-        str3 = f"$T_0 =${self.temp_init};  "
         str22 = "\n"
+        str3 = f"$T_0 =${self.temp_init};  "
         str4 = r"""$T \rightarrow $ """
         str5 = f"{self.annealing_rate}"
         str6 = r"""$\times T$ """
@@ -209,7 +236,8 @@ class GaussianMixtureModel(object):
         #str5 = f"$ \times T$ every {annealing_steps} steps"
         #str2 = (r"$T \rightarrow $" + f"{annealing_rate}" + " \times T$ "
         #        f"every {annealing_steps} steps")
-        ax.set_title(str1 + str2 + str3 + str22 + str4 + str5 + str6 + str7)
+        ax.set_title(str0 + str1 + str2 +  str22 + str3 + str4 + str5 + str6 +
+                     str7)
         #ax.set_ylim((-0.05, 1.))
         fig.tight_layout()
         out_file = (self.figs_dir +
@@ -222,9 +250,14 @@ class GaussianMixtureModel(object):
     def _distribution(self, sigma, means, small_pi=2e-16):
         means = np.array(means).astype(np.float32)
         cov_mtx = sigma * np.eye(self.x_dim).astype(np.float32)
-        self.covs = np.array([cov_mtx, cov_mtx, cov_mtx]).astype(np.float32)
-        big_pi = (1 - small_pi) / 2
-        distribution = GMM(means, self.covs, [big_pi, big_pi, small_pi])
+        self.covs = np.array([cov_mtx] * self.x_dim).astype(np.float32)
+        dist_arr = distribution_arr(self.x_dim, self.num_distributions)
+        #small_pi1 = small_pi / 2
+
+        #self.covs = np.array([cov_mtx, cov_mtx,
+        #                      cov_mtx, cov_mtx]).astype(np.float32)
+        gbig_pi = (1 - small_pi) / 2
+        distribution = GMM(means, self.covs, dist_arr)
         return distribution
 
     def _create_log_dir(self):
@@ -280,7 +313,9 @@ class GaussianMixtureModel(object):
     def _create_params_file(self):
         params_file = self.info_dir + 'parameters.txt'
         with open(params_file, 'w') as f:
-            f.write((f"\ninitial_temp: {self.temp_init}\n"
+            f.write((f"\nx_dim: {self.x_dim}\n"
+                     f"\nnum_distributions: {self.num_distributions}\n"
+                     f"\ninitial_temp: {self.temp_init}\n"
                      f"\nannealing_steps: {self.annealing_steps}\n"
                      f"\nannealing_factor: {self.annealing_rate}\n"
                      f"\neps: {self.eps} (initial step size; trainable)\n"
@@ -299,6 +334,8 @@ class GaussianMixtureModel(object):
             pickle.dump(self.tunneling_events_all, f)
         with open(self.tunneling_rates_all_file, 'wb') as f:
             pickle.dump(self.tunneling_rates_all, f)
+        dimension_arr = np.array([self.x_dim, self.num_distributions])
+        np.save(self.info_dir + 'dimension_arr', dimension_arr)
         np.save(self.info_dir + 'steps_array', np.array(self.steps_arr))
         np.save(self.info_dir + 'training_samples',
                 np.array(self.training_samples))
@@ -314,6 +351,9 @@ class GaussianMixtureModel(object):
                 np.array(self.tunneling_rates_err_all))
 
     def _load_variables(self):
+        dimension_arr = np.load(self.info_dir + 'dimension_arr.npy')
+        self.x_dim = dimension_arr[0]
+        self.num_distributions = dimension_arr[1]
         self.temp_arr = list(np.load(self.info_dir + 'temp_array.npy'))
         self.training_samples = list(np.load(self.info_dir +
                                         'training_samples.npy'))
@@ -362,7 +402,8 @@ class GaussianMixtureModel(object):
         tunneling_events = []
         for i in range(trajectories.shape[1]):
             events, rate = find_tunneling_events(trajectories[:, i, :],
-                                                 self.means)
+                                                 self.means,
+                                                 self.num_distributions)
             tunneling_rate.append(rate)
             tunneling_events.append(events)
         tunneling_rate_avg = np.mean(tunneling_rate)
@@ -473,10 +514,24 @@ class GaussianMixtureModel(object):
 
 
 def main(args):
+    X_DIM = args.dimension
+    params['x_dim'] = X_DIM
+    NUM_DISTRIBUTIONS = args.num_distributions
+    params['num_distributions'] = args.num_distributions
+    MEANS = np.zeros((X_DIM, X_DIM), dtype=np.float32)
+    for i in range(NUM_DISTRIBUTIONS):
+        MEANS[i::NUM_DISTRIBUTIONS, i] = np.sqrt(2)
+    params['means'] = MEANS
+
+    if args.temp_init:
+        TEMP_INIT = args.temp_init
+        params['temp_init'] = TEMP_INIT
     if args.annealing_steps:
         ANNEALING_STEPS = args.annealing_steps
+        params['annealing_steps'] = ANNEALING_STEPS
     if args.annealing_rate:
         ANNEALING_RATE = args.annealing_rate
+        params['annealing_rate'] = ANNEALING_RATE
     if args.log_dir:
         model = GaussianMixtureModel(params, log_dir=args.log_dir)
     else:
@@ -497,9 +552,16 @@ if __name__ == '__main__':
         description=('L2HMC model using Mixture of Gaussians '
                      'for target distribution')
     )
+    parser.add_argument("-d", "--dimension", type=int, required=True,
+                        help="Dimensionality of distribution space.")
+    parser.add_argument("-N", "--num_distributions", type=int, required=True,
+                        help="Number of distributions to include for GMM model.")
     parser.add_argument("-n", "--num_steps", default=10000, type=int,
-                        required=True, help="Define the number of training"
+                        required=True, help="Define the number of training "
                         "steps. (Default: 10000)")
+    parser.add_argument("-T", "--temp_init", default=20, type=int,
+                        required=False, help="Initial temperature to use for "
+                        "annealing. (Default: 20)")
     parser.add_argument("--annealing_steps", default=100, type=int,
                         required=False, help="Number of annealing steps."
                         "(Default: 100)")
