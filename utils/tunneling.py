@@ -32,7 +32,7 @@ def calc_tunneling_rate(trajectory, min_distance):
     tunneling_rate = num_events / (len(trajectory) - 1)
     return tunneling_events, tunneling_rate
 
-def match_distribution(x, means):
+def match_distribution(x, means, num_distributions):
     """Given a point x and multiple unique normal distributions (each with their
     own respective mean), try to identify which distribution the point x
     belongs to.
@@ -45,21 +45,23 @@ def match_distribution(x, means):
             distributions.
     """
     norm_diff_arr = []
-    for mean in means:
-        diff = x - mean
+    #for mean in means:
+    for row in range(num_distributions):
+        #diff = x - meaan
+        diff = x - means[row]
         norm_diff = np.sqrt(np.dot(diff.T, diff))
         norm_diff_arr.append(norm_diff)
     return np.argmin(np.array(norm_diff_arr))
 
-def find_tunneling_events(trajectory, means):
+def find_tunneling_events(trajectory, means, num_distributions):
     idxs = [(i, i+1) for i in range(len(trajectory) - 1)]
     tunneling_events = {}
     num_events = 0
     for pair in idxs:
         x0 = trajectory[pair[0]]
         x1 = trajectory[pair[1]]
-        dist0 = match_distribution(x0, means)
-        dist1 = match_distribution(x1, means)
+        dist0 = match_distribution(x0, means, num_distributions)
+        dist1 = match_distribution(x1, means, num_distributions)
         if dist1 != dist0:
             tunneling_events[pair] = [x0, x1]
             num_events += 1
