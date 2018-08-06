@@ -4,17 +4,24 @@ import os
 def get_run_num(log_dir):
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
-    run_dirs = []
     contents = os.listdir(log_dir)
-    if contents == ['.DS_Store']:
-        return 1
-    else:
-        for item in contents:
-            if os.path.isdir(log_dir + item):
-                run_dirs.append(item)
-        run_nums = [int(str(i)[3:]) for i in run_dirs]
-        prev_run_num = max(run_nums)
-        return prev_run_num + 1
+
+    run_nums = []
+    for item in contents:
+        try:
+            run_nums.append(int(''.join(x for x in item if x.isdigit())))
+        except ValueError:
+            continue
+    return sorted(run_nums)[-1] + 1
+    #  if contents == ['.DS_Store']:
+    #      return 1
+    #  else:
+    #      for item in contents:
+    #          if os.path.isdir(log_dir + item):
+    #              run_dirs.append(item)
+    #      run_nums = [int(str(i)[3:]) for i in run_dirs]
+    #      prev_run_num = max(run_nums)
+    #      return prev_run_num + 1
 
 def make_run_dir(log_dir):
     if log_dir.endswith('/'):

@@ -31,25 +31,25 @@ from utils.jackknife import block_resampling, jackknife_err
 # into distributions and see if any unforseen prooblems arise. 
 
 # Model hyperparameters
-X_DIM = 4
-NUM_DISTRIBUTIONS = 2
-LR_INIT = 1e-3
-LR_DECAY_RATE = 0.96
-TEMP_INIT = 20
-ANNEALING_RATE = 0.98
-EPS = 0.1
-SCALE = 0.1
-NUM_SAMPLES = 200
-TRAIN_TRAJECTORY_LENGTH = 2000
-NUM_TRAINING_STEPS = 10000
-LR_DECAY_STEPS = 1000
-ANNEALING_STEPS = 50
-LOGGING_STEPS = 50
-TUNNELING_RATE_STEPS = 500
-SAVE_STEPS = 2500
-MEANS = np.zeros((X_DIM, X_DIM), dtype=np.float32)
-for i in range(NUM_DISTRIBUTIONS):
-    MEANS[i::NUM_DISTRIBUTIONS, i] = np.sqrt(2)
+#  X_DIM = 4
+#  NUM_DISTRIBUTIONS = 2
+#  LR_INIT = 1e-3
+#  LR_DECAY_RATE = 0.96
+#  TEMP_INIT = 20
+#  ANNEALING_RATE = 0.98
+#  EPS = 0.1
+#  SCALE = 0.1
+#  NUM_SAMPLES = 200
+#  TRAIN_TRAJECTORY_LENGTH = 1000
+#  NUM_TRAINING_STEPS = 10000
+#  LR_DECAY_STEPS = 1000
+#  ANNEALING_STEPS = 50
+#  LOGGING_STEPS = 50
+#  TUNNELING_RATE_STEPS = 500
+#  SAVE_STEPS = 2500
+#  MEANS = np.zeros((X_DIM, X_DIM), dtype=np.float32)
+#  for i in range(NUM_DISTRIBUTIONS):
+#      MEANS[i::NUM_DISTRIBUTIONS, i] = np.sqrt(2)
 #MEANS = np.array([[np.sqrt(2), 0.0, 0.0, 0.0],
 #                  [0.0, np.sqrt(2), 0.0, 0.0],
 #                  [np.sqrt(2), 0.0, 0.0, 0.0],
@@ -57,29 +57,29 @@ for i in range(NUM_DISTRIBUTIONS):
 #MEANS = np.array([[np.sqrt(2), 0.0, 0.0],
 #                  [0.0, np.sqrt(2), 0.0],
 #                  [np.sqrt(2), 0.0, 0.0]]).astype(np.float32)
-SIGMA = 0.05
-SMALL_PI = 2e-16
+#  SIGMA = 0.05
+#  SMALL_PI = 2e-16
 
-params = {
-    'x_dim': X_DIM,
-    'num_distributions': NUM_DISTRIBUTIONS,
-    'lr_init': LR_INIT,
-    'temp_init': TEMP_INIT,
-    'annealing_rate': ANNEALING_RATE,
-    'eps': EPS,
-    'scale': SCALE,
-    'num_samples': NUM_SAMPLES,
-    'train_trajectory_length': TRAIN_TRAJECTORY_LENGTH,
-    'means': MEANS,
-    'sigma': SIGMA,
-    'small_pi': SMALL_PI,
-    'num_training_steps': NUM_TRAINING_STEPS,
-    'annealing_steps': ANNEALING_STEPS,
-    'tunneling_rate_steps': TUNNELING_RATE_STEPS,
-    'lr_decay_steps': LR_DECAY_STEPS,
-    'save_steps': SAVE_STEPS,
-    'logging_steps': LOGGING_STEPS
-}
+#  params = {
+#      'x_dim': 4,
+#      'num_distributions': 2,
+#      'lr_init': 1e-3,
+#      'temp_init': 20,
+#      'annealing_rate': 0.98,
+#      'eps': 0.1,
+#      'scale': 0.1,
+#      'num_samples': 200,
+#      'train_trajectory_length': 2000,
+#      'means': MEANS,
+#      'sigma': SIGMA,
+#      'small_pi': 2E-16,
+#      'num_training_steps': 20000,
+#      'annealing_steps': 100,
+#      'tunneling_rate_steps': 500,
+#      'lr_decay_steps': 1000,
+#      'save_steps': 2500,
+#      'logging_steps': 50
+#  }
 
 def distribution_arr(x_dim, n_distributions):
     big_pi = (1.0 / n_distributions) - 1E-16
@@ -149,9 +149,8 @@ def plot_trajectory_and_distribution(samples, trajectory, x_dim=None):
 class GaussianMixtureModel(object):
     """Model for training L2HMC using multiple Gaussian distributions."""
     def __init__(self, params, log_dir=None):
-        if log_dir is None:
-            self.log_dir, self.info_dir, self.figs_dir = self._create_log_dir()
-        else:
+        """Initialize parameters and define relevant directories."""
+        if log_dir is not None:
             if not os.path.isdir(log_dir):
                 raise ValueError(f'Unable to locate {log_dir}, exiting.')
             else:
@@ -166,44 +165,52 @@ class GaussianMixtureModel(object):
                 if not os.path.isdir(self.figs_dir):
                     os.makedirs(self.figs_dir)
 
+            self.tunneling_events_all_file = (self.info_dir +
+                                         'tunneling_events_all.pkl')
+            self.tunneling_rates_all_file = (self.info_dir +
+                                        'tunneling_rates_all.pkl')
+            self._load_variables()
+        else:
+            self.log_dir, self.info_dir, self.figs_dir = self._create_log_dir()
+            #  self.params = params
+            self.x_dim = params.get('x_dim', 3)
+            self.num_distributions = params.get('num_distributions', 2)
+            self.lr_init = params.get('lr_init', 1e-3)
+            self.lr_decay_steps = params.get('lr_decay_steps', 1000)
+            self.lr_decay_rate = params.get('lr_decay_rate', 0.96)
+            self.temp_init = params.get('temp_init', 10)
+            self.temp = self.temp_init
+            self.annealing_steps = params.get('annealing_steps', 100)
+            self.annealing_rate = params.get('annealing_rate', 0.98)
+            self.eps = params.get('eps', 0.1)
+            self.scale = params.get('scale', 0.1)
+            self.num_training_steps = params.get('num_training_steps', 2e4)
+            self.num_samples = params.get('num_samples', 200)
+            self.train_trajectory_length = params.get('train_trajectory_length',
+                                                      1e3)
+            self.sigma = params.get('sigma', 0.05)
+            self.means = params.get('means', np.eye(self.x_dim))
+            self.small_pi = params.get('small_pi', 2e-16)
+            self.logging_steps = params.get('logging_steps', 50)
+            self.tunneling_rate_steps = params.get('tunneling_rate_steps', 500)
+            self.save_steps = params.get('save_steps', 2500)
+            self.distribution = self._distribution(self.sigma, self.means,
+                                                   self.small_pi)
+            self.samples = np.random.randn(self.num_samples, self.x_dim)
 
-        self.x_dim = params.get('x_dim', 3)
-        self.num_distributions = params.get('num_distributions', 2)
-        self.lr_init = params.get('lr_init', 1e-3)
-        self.lr_decay_steps = params.get('lr_decay_steps', 1000)
-        self.lr_decay_rate = params.get('lr_decay_rate', 0.96)
-        self.temp_init = params.get('temp_init', 10)
-        self.temp = self.temp_init
-        self.annealing_steps = params.get('annealing_steps', 100)
-        self.annealing_rate = params.get('annealing_rate', 0.98)
-        self.eps = params.get('eps', 0.1)
-        self.scale = params.get('scale', 0.1)
-        self.num_training_steps = params.get('num_training_steps', 2e4)
-        self.num_samples = params.get('num_samples', 200)
-        self.train_trajectory_length = params.get('train_trajectory_length',
-                                                  2e3)
-        self.sigma = params.get('sigma', 0.05)
-        self.means = params.get('means', np.eye(self.x_dim))
-        self.small_pi = params.get('small_pi', 2e-16)
-        self.logging_steps = params.get('logging_steps', 50)
-        self.tunneling_rate_steps = params.get('tunneling_rate_steps', 500)
-        self.save_steps = params.get('save_steps', 2500)
-        self.distribution = self._distribution(self.sigma, self.means,
-                                               self.small_pi)
-        self.samples = np.random.randn(self.num_samples, self.x_dim)
+            self.tunneling_rates_all = {}
+            self.tunneling_events_all = {}
+            self.losses = []
+            self.training_samples = []
+            self.tunneling_info = []
+            self.temp_arr = []
+            self.steps_arr = []
 
-        self.tunneling_rates_all = {}
-        self.tunneling_events_all = {}
-        self.losses = []
-        self.training_samples = []
-        self.tunneling_info = []
-        self.temp_arr = []
-        self.steps_arr = []
+            self.tunneling_events_all_file = (self.info_dir +
+                                         'tunneling_events_all.pkl')
+            self.tunneling_rates_all_file = (self.info_dir +
+                                        'tunneling_rates_all.pkl')
 
-        self.tunneling_events_all_file = (self.info_dir +
-                                     'tunneling_events_all.pkl')
-        self.tunneling_rates_all_file = (self.info_dir +
-                                    'tunneling_rates_all.pkl')
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         tf.add_to_collection('global_step', self.global_step)
@@ -219,32 +226,40 @@ class GaussianMixtureModel(object):
         fig, ax = plt.subplots()
         ax.errorbar(self.steps_arr, self.tunneling_rates_avg_all,
                     yerr=self.tunneling_rates_err_all, capsize=1.5,
-                    capthick=1.5, color='C0', marker='.', ls='-',
+                    capthick=1.5, color='C0', marker='.', ls='--',
+                    fillstyle='none')
+        ax1 = ax.twiny()
+        ax1.errorbar(self.temp_arr, self.tunneling_rates_avg_all,
+                    yerr=self.tunneling_rates_err_all, capsize=1.5,
+                    capthick=1.5, color='C1', marker='.', ls='-', alpha=0.8,
                     fillstyle='none')
         ax.set_ylabel('Tunneling rate')#, fontsize=16)
-        ax.set_xlabel('Training step')#, fontsize=16)
+        ax.set_xlabel('Training step', color='C0')
+        ax1.set_xlabel('Temperature', color='C1')
+        ax.tick_params('x', colors='C0')
+        ax1.tick_params('x', colors='C1')
+        #  ax.set_xlabel('Training step')#, fontsize=16)
         #ax.legend(loc='best')#, markerscale=1.5), fontsize=12)
-        str0 = f"""dim: {self.x_dim};  """
-        str1 = r"""$\mathcal{N}_1(\sqrt{2}\hat x; {{self.sigma}}), $"""
-        str2 = r"""$\mathcal{N}_2(\sqrt{2}\hat y; {{self.sigma}}),$ """
-        str22 = "\n"
-        str3 = f"$T_0 =${self.temp_init};  "
-        str4 = r"""$T \rightarrow $ """
-        str5 = f"{self.annealing_rate}"
-        str6 = r"""$\times T$ """
-        str7 = f"every {self.annealing_steps} steps"
-        #str5 = f"$ \times T$ every {annealing_steps} steps"
-        #str2 = (r"$T \rightarrow $" + f"{annealing_rate}" + " \times T$ "
-        #        f"every {annealing_steps} steps")
-        ax.set_title(str0 + str1 + str2 +  str22 + str3 + str4 + str5 + str6 +
-                     str7)
+        str0 = f'dim: {self.x_dim}; '
+        str1 = r'$\mathcal{N}_1(\sqrt{2}\hat x; $'+r'${{{0}}}),$'.format(self.sigma)
+        str2 = r' $\mathcal{N}_2(\sqrt{2}\hat y; $'+r'${{{0}}})$'.format(self.sigma)
+        #  str22 = "\n"
+        #  str3 = f"$T_0 =${self.temp_init};  "
+        #  str4 = r"""$T \rightarrow $ """
+        #  str5 = f"{self.annealing_rate}"
+        #  str6 = r"""$\times T$ """
+        #  str7 = f"every {self.annealing_steps} steps"
+        #  #str5 = f"$ \times T$ every {annealing_steps} steps"
+        #  #str2 = (r"$T \rightarrow $" + f"{annealing_rate}" + " \times T$ "
+        #  #        f"every {annealing_steps} steps")
+        ax.set_title(str0 + str1 + str2, y=1.15)
         #ax.set_ylim((-0.05, 1.))
         fig.tight_layout()
-        out_file = (self.figs_dir +
-                    f'3D_tunneling_rate_vs_step_num_{int(self.steps_arr[-1])}'
-                    + '.png')
+        out_file = (self.figs_dir
+                    + f'tunneling_rate_{int(self.steps_arr[-1])}.pdf')
         print(f'Saving figure to: {out_file}')
         fig.savefig(out_file, dpi=400, bbox_inches='tight')
+        plt.close('all')
         return fig, ax
 
     def _distribution(self, sigma, means, small_pi=2e-16):
@@ -292,10 +307,15 @@ class GaussianMixtureModel(object):
             v2 = ((tf.reduce_sum(tf.square(self.z - self.Lz), axis=1) * self.pz)
                   + 1e-4)
             scale = self.scale
-            self.loss += scale * (tf.reduce_mean(1.0 / v1)
-                                  + tf.reduce_mean(1.0 / v2))
-            self.loss += (- tf.reduce_mean(v1, name='v1')
-                          - tf.reduce_mean(v2, name='v2')) / scale
+
+            #  tf.assign_add(self.loss, (scale * (tf.reduce_mean(1.0 / v1)
+            #                                     + tf.reduce_mean(1.0 / v2))))
+            #  tf.assign_add(self.loss, (- tf.reduce_mean(v1, name='v1')
+            #                            - tf.reduce_mean(v1, name='v2')) / scale)
+            self.loss = self.loss + scale * (tf.reduce_mean(1.0 / v1)
+                                             + tf.reduce_mean(1.0 / v2))
+            self.loss = self.loss + ((- tf.reduce_mean(v1, name='v1')
+                          - tf.reduce_mean(v2, name='v2')) / scale)
 
     def _create_optimizer(self):
         with tf.name_scope('train'):
@@ -334,8 +354,10 @@ class GaussianMixtureModel(object):
             pickle.dump(self.tunneling_events_all, f)
         with open(self.tunneling_rates_all_file, 'wb') as f:
             pickle.dump(self.tunneling_rates_all, f)
-        dimension_arr = np.array([self.x_dim, self.num_distributions])
-        np.save(self.info_dir + 'dimension_arr', dimension_arr)
+        params_arr = np.array([self.x_dim, self.num_distributions, self.lr_init])
+        #  with open(self.info_dir + 'params.pkl', 'wb') as f:
+            #  pickle.dump(self.params)
+        np.save(self.info_dir + 'params_arr', params_arr)
         np.save(self.info_dir + 'steps_array', np.array(self.steps_arr))
         np.save(self.info_dir + 'training_samples',
                 np.array(self.training_samples))
@@ -351,6 +373,9 @@ class GaussianMixtureModel(object):
                 np.array(self.tunneling_rates_err_all))
 
     def _load_variables(self):
+        #  with open(self.info_dir + params.pkl, 'wb') as f:
+        #      self.params = pickle.load(f)
+
         dimension_arr = np.load(self.info_dir + 'dimension_arr.npy')
         self.x_dim = dimension_arr[0]
         self.num_distributions = dimension_arr[1]
@@ -448,7 +473,8 @@ class GaussianMixtureModel(object):
             writer = tf.summary.FileWriter(self.log_dir, sess.graph)
             #initial_step = int(self.global_step.eval())
             #initial_step = sess.run(self.global_step)
-
+            t0 = time.time()
+            #  big_step = 0
             for step in range(initial_step, initial_step + num_train_steps):
                 feed_dict = {self.x: self.samples,
                              self.dynamics.temperature: self.temp}
@@ -474,12 +500,17 @@ class GaussianMixtureModel(object):
                           f"temp: {self.temp:.5f}\n ")
 
                 if step % self.annealing_steps == 0:
-                    if self.temp <= 1.1:
-                        continue
-                    else:
-                        self.temp *= self.annealing_rate
-
+                    tt = self.temp * self.annealing_rate
+                    if tt > 1:
+                        self.temp = tt
+                    #  big_step += 1
+                    #  denom = 1 + self.annealing_rate * big_step
+                    #  self.temp = float(self.temp_init) / denom
+                    #  if self.temp <= 1.1
+                    #      continue
+                    #  self.temp *= self.annealing_rate
                 if (step + 1) % self.tunneling_rate_steps == 0:
+                    t1 = time.time()
                     self.temp_arr.append(self.temp)
                     self.steps_arr.append(step+1)
 
@@ -498,9 +529,33 @@ class GaussianMixtureModel(object):
                     self.tunneling_rates_avg_all = avg_info[0]
                     self.tunneling_rates_err_all = avg_info[1]
 
+
+
                     print(f"\n\t Step: {step}, "
                           f"Tunneling rate avg: {tunneling_rate_avg}, "
                           f"Tunnneling rate std: {tunneling_rate_std}\n")
+                    tt = time.time()
+                    tunneling_time = int(tt - t1)
+                    elapsed_time = int(tt- t0)
+                    #  if step + 1 > self.tunneling_rate_steps:
+                        #  training_time = int(t2 - t1)
+                        #  t_str1 = time.strftime("%H:%M:%S",
+                        #                         time.gmtime(training_time))
+                        #  print('\ttime to train for'
+                        #        f'{self.tunneling_rate_steps}' + t_str1)
+
+                    t_str2 = time.strftime("%H:%M:%S",
+                                           time.gmtime(tunneling_time))
+                    t_str = time.strftime("%H:%M:%S",
+                                          time.gmtime(elapsed_time))
+                    #  h = elapsed_time // 3600
+                    #  m = elapsed_time % 3600 // 60
+                    #  s = elapsed_time % 60
+                    #  print(f'\n\t Time elapsed: {h:02d}:{m:02d}:{s:02d}\n')
+
+                    print('\ttime spent calculating tunneling_rate: ' + t_str2)
+                    print('\n\ttotal ttime elapsed: ' + t_str)
+
                     #  import pdb
                     #  pdb.set_trace()
                     self.plot_tunneling_rates()
@@ -514,28 +569,52 @@ class GaussianMixtureModel(object):
 
 
 def main(args):
+
     X_DIM = args.dimension
-    params['x_dim'] = X_DIM
     NUM_DISTRIBUTIONS = args.num_distributions
-    params['num_distributions'] = args.num_distributions
+
     MEANS = np.zeros((X_DIM, X_DIM), dtype=np.float32)
     for i in range(NUM_DISTRIBUTIONS):
         MEANS[i::NUM_DISTRIBUTIONS, i] = np.sqrt(2)
-    params['means'] = MEANS
 
+
+    params = {                          # default parameter values
+        'x_dim': X_DIM,
+        'num_distributions': NUM_DISTRIBUTIONS,
+        'lr_init': 1e-3,
+        'temp_init': 20,
+        'annealing_rate': 0.98,
+        'eps': 0.1,
+        'scale': 0.1,
+        'num_samples': 200,
+        'train_trajectory_length': 1000,
+        'means': MEANS,
+        'sigma': 0.05,
+        'small_pi': 2E-16,
+        'num_training_steps': 20000,
+        'annealing_steps': 100,
+        'tunneling_rate_steps': 500,
+        'lr_decay_steps': 1000,
+        'save_steps': 2500,
+        'logging_steps': 50
+    }
+
+    params['x_dim'] = args.dimension
+
+    if args.step_size:
+        params['eps'] = args.step_size
     if args.temp_init:
-        TEMP_INIT = args.temp_init
-        params['temp_init'] = TEMP_INIT
+        params['temp_init'] = args.temp_init
     if args.annealing_steps:
-        ANNEALING_STEPS = args.annealing_steps
-        params['annealing_steps'] = ANNEALING_STEPS
+        params['annealing_steps'] = args.annealing_steps
     if args.annealing_rate:
-        ANNEALING_RATE = args.annealing_rate
-        params['annealing_rate'] = ANNEALING_RATE
+        params['annealing_rate'] = args.annealing_rate
+
     if args.log_dir:
         model = GaussianMixtureModel(params, log_dir=args.log_dir)
     else:
         model = GaussianMixtureModel(params)
+
     if args.num_steps:
         num_train_steps = args.num_steps
     else:
@@ -554,22 +633,34 @@ if __name__ == '__main__':
     )
     parser.add_argument("-d", "--dimension", type=int, required=True,
                         help="Dimensionality of distribution space.")
+
     parser.add_argument("-N", "--num_distributions", type=int, required=True,
                         help="Number of distributions to include for GMM model.")
+
     parser.add_argument("-n", "--num_steps", default=10000, type=int,
                         required=True, help="Define the number of training "
                         "steps. (Default: 10000)")
+
     parser.add_argument("-T", "--temp_init", default=20, type=int,
                         required=False, help="Initial temperature to use for "
                         "annealing. (Default: 20)")
+
+    parser.add_argument("--step_size", default=0.1, type=float, required=False,
+                        help="Initial step size to use in leapfrog update,"
+                        "called `eps` in code. (This will be tuned for an"
+                        "optimal value during" "training)")
+
     parser.add_argument("--annealing_steps", default=100, type=int,
                         required=False, help="Number of annealing steps."
                         "(Default: 100)")
+
     parser.add_argument("--annealing_rate", default=0.98, type=float,
                         required=False, help="Annealing rate. (Default: 0.98)")
+
     parser.add_argument("--log_dir", type=str, required=False,
                         help="Define the log dir to use if restoring from"
                         "previous run (Default: None)")
+
     args = parser.parse_args()
 
     #if args.n_steps is  not None:
