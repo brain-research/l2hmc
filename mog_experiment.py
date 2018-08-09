@@ -37,13 +37,13 @@ def distribution_arr(x_dim, n_distributions):
     if x_dim == n_distributions:
         big_pi = round(1.0 / n_distributions, x_dim)
         arr = n_distributions * [big_pi]
-        return np.array(arr, dtype=np.float32), big_pi
+        return np.array(arr, dtype=np.float32)
     else:
         big_pi = (1.0 / n_distributions) - 1E-16
         arr = n_distributions * [big_pi]
         small_pi = (1. - sum(arr)) / (x_dim - n_distributions)
         arr.extend((x_dim - n_distributions) * [small_pi])
-        return np.array(arr, dtype=np.float32), big_pi, small_pi
+        return np.array(arr, dtype=np.float32)
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__
