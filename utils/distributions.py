@@ -113,7 +113,7 @@ class RoughWell(object):
 class GMM(object):
     def __init__(self, mus, sigmas, pis):
         assert len(mus) == len(sigmas)
-        assert np.sum(pis) == 1.0
+        assert np.around(np.sum(pis), len(pis)-1) == 1.0
 
         self.mus = mus
         self.sigmas = sigmas
