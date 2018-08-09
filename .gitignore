@@ -8,4 +8,6 @@ toy_tasks/
 *.npy
 log_mog_tf/*
 old_logs/*
+good_logs/*
+lattice/*
 Untitled.ipynb
