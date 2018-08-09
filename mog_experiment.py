@@ -530,6 +530,7 @@ class GaussianMixtureModel(object):
 
                     if (step + 1) % self.params['tunneling_rate_steps'] == 0:
                         t1 = time.time()
+
                         self.temp_arr.append(self.temp)
                         self.steps_arr.append(step+1)
 
@@ -545,31 +546,53 @@ class GaussianMixtureModel(object):
                         self.tunneling_info.append(tunneling_info)
 
                         avg_info = self.calc_tunneling_rates_errors(step)
-                        new_tunneling_rate = avg_info[0]
-                        prev_tunneling_rate = 0
-                        if len(self.tunneling_rates_avg_all) > 1:
-                            prev_tunneling_rate = (
-                                self.tunneling_rates_avg_all[-1]
-                            )
-
                         self.tunneling_rates_avg_all.append(avg_info[0])
                         self.tunneling_rates_err_all.append(avg_info[1])
 
+                        self.plot_tunneling_rates()
 
-                        if new_tunneling_rate <= prev_tunneling_rate:
-                            print("\n\tTunneling rate decreased! Reversing"
-                                  "annealing step!\n")
-                            tt = self.temp / self.params['annealing_rate']
-                            self.temp = tt
-                            #  if tt > 1:
-                        #  self.tunneling_rates_avg_all = avg_info[0]
-                        #  self.tunneling_rates_err_all = avg_info[1]
+                        #######################################################
+                        #  TODO: Implement tempearture refresh if
+                        #  tunneling_rate decreases.
+                        #######################################################
+                        #  new_tunneling_rate = avg_info[0]
+                        #  prev_tunneling_rate = 0
+                        #  if len(self.tunneling_rates_avg_all) > 1:
+                        #      prev_tunneling_rate = (
+                        #          self.tunneling_rates_avg_all[-1]
+                        #      )
+                        #
+                        #  prev_temp = None
+                        #  if new_tunneling_rate <= prev_tunneling_rate:
+                        #      print("\n\tTunneling rate decreased! Reversing"
+                        #            " previous annealing steps...!\n")
+                        #      # the following will revert self.temp to the value
+                        #      # it previously had the last time the tunneling
+                        #      # rate was calculated.
+                        #      # For example: 25 / (0.99^(1000/150))
+                        #      prev_temp = (self.temp /
+                        #                   (self.params['annealing_rate'] **
+                        #                    (self.params['tunneling_rate_steps']
+                        #                     / self.params['annealing_steps'])))
+                        #      # to prevent from duplicate temperatures when
+                        #      # plotting tunneling rate
+                        #      prev_temp *= (self.params['annealing_rate'] ** 2)
+                        #      #  tt = self.temp / self.params['annealing_rate']
+                        #      #  self.temp = tt
+                        #      #  if tt > 1:
+                        #  #  self.tunneling_rates_avg_all = avg_info[0]
+                        #  #  self.tunneling_rates_err_all = avg_info[1]
+                        #  if prev_temp is not None:
+                        #      # Revert temperature to prev_temp
+                        #      self.temp = prev_temp
+                        #      self.temp_arr[-1] = prev_temp
+                        #######################################################
 
                         print(f"\n\t Step: {step}, "
                               #  f"Tunneling rate avg: {avg_info[0][-1]}, "
                               #  f"Tunnneling rate err: {avg_info[1][-2]}\n")
-                              f"Tunneling rate avg: {tunneling_rate_avg}, "
-                              f"Tunnneling rate std: {tunneling_rate_std}\n")
+                              f"Tunneling rate avg: {tunneling_rate_avg:.3g}")
+
                         tt = time.time()
                         tunneling_time = int(tt - t1)
                         elapsed_time = int(tt - t0)
@@ -582,12 +605,9 @@ class GaussianMixtureModel(object):
                         t_str3 = time.strftime("%H:%M:%S",
                                               time.gmtime(time_per_step100))
 
-                        print('\tTime spent calculating tunneling_rate: ' + t_str2)
-                        print('\tTime per 100 steps: ' + t_str3)
-                        print('\tTotal time elapsed: ' + t_str + '\n')
-
-                        self.plot_tunneling_rates()
-                        #  self._save_variables()
+                        print(f'\tTime to calculate tunneling_rate: {t_str2}')
+                        print(f'\tTime for 100 training steps: {t_str3}')
+                        print(f'\tTotal time elapsed: {t_str}\n')
 
                     if (step + 1) % self.params['save_steps'] == 0:
                         self._save_variables()
