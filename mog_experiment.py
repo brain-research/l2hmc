@@ -35,15 +35,15 @@ def distribution_arr(x_dim, n_distributions):
     assert x_dim >= n_distributions, ("n_distributions must be less than or"
                                       " equal to x_dim.")
     if x_dim == n_distributions:
-        big_pi = 1.0 / n_distributions
+        big_pi = round(1.0 / n_distributions, x_dim)
         arr = n_distributions * [big_pi]
-        return np.array(arr, dtype=np.float32)
+        return np.array(arr, dtype=np.float32), big_pi
     else:
         big_pi = (1.0 / n_distributions) - 1E-16
         arr = n_distributions * [big_pi]
-        small_pi = (1 - sum(arr)) / (x_dim - n_distributions)
+        small_pi = (1. - sum(arr)) / (x_dim - n_distributions)
         arr.extend((x_dim - n_distributions) * [small_pi])
-        return np.array(arr, dtype=np.float32)
+        return np.array(arr, dtype=np.float32), big_pi, small_pi
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__
@@ -122,8 +122,8 @@ class GaussianMixtureModel(object):
                     os.makedirs(self.info_dir)
                 if not os.path.isdir(self.figs_dir):
                     os.makedirs(self.figs_dir)
-            self.tunneling_events_all_file = (self.info_dir +
-                                              'tunneling_events_all.pkl')
+            #  self.tunneling_events_all_file = (self.info_dir +
+            #                                    'tunneling_events_all.pkl')
             self.tunneling_rates_all_file = (self.info_dir +
                                              'tunneling_rates_all.pkl')
             self.params_file = self.info_dir + 'params_dict.pkl'
@@ -131,8 +131,8 @@ class GaussianMixtureModel(object):
         else:
             self.log_dir, self.info_dir, self.figs_dir = self._create_log_dir()
 
-            self.tunneling_events_all_file = (self.info_dir +
-                                              'tunneling_events_all.pkl')
+            #  self.tunneling_events_all_file = (self.info_dir +
+            #                                    'tunneling_events_all.pkl')
             self.tunneling_rates_all_file = (self.info_dir +
                                              'tunneling_rates_all.pkl')
             self.params_file = self.info_dir + 'params_dict.pkl'
@@ -178,9 +178,11 @@ class GaussianMixtureModel(object):
         self.samples = np.random.randn(self.params['num_samples'],
                                        self.params['x_dim'])
         self.tunneling_rates_all = {}
-        self.tunneling_events_all = {}
+        self.tunneling_rates_avg_all = []
+        self.tunneling_rates_err_all = []
+        #  self.tunneling_events_all = {}
         self.losses = []
-        self.training_samples = []
+        #  self.training_samples = []
         self.tunneling_info = []
         self.temp_arr = []
         self.temp = self.params['temp_init']
@@ -190,30 +192,37 @@ class GaussianMixtureModel(object):
         """Method for plotting tunneling rates during training."""
         #  tunneling_info_arr = np.array(self.tunneling_info)
         #  step_nums = tunneling_info_arr[:, 0]
-        fig, ax = plt.subplots()
-        ax.errorbar(self.steps_arr, self.tunneling_rates_avg_all,
-                    yerr=self.tunneling_rates_err_all, capsize=1.5,
-                    capthick=1.5, color='C0', marker='.', ls='--',
-                    fillstyle='none')
-        ax1 = ax.twiny()
-        ax1.errorbar(self.temp_arr, self.tunneling_rates_avg_all,
-                    yerr=self.tunneling_rates_err_all, capsize=1.5,
-                    capthick=1.5, color='C1', marker='.', ls='-', alpha=0.8,
-                    fillstyle='none')
-        ax.set_ylabel('Tunneling rate')#, fontsize=16)
-        ax.set_xlabel('Training step', color='C0')
-        ax1.set_xlabel('Temperature', color='C1')
-        ax.tick_params('x', colors='C0')
-        ax1.tick_params('x', colors='C1')
-        #  ax.set_xlabel('Training step')#, fontsize=16)
-        #ax.legend(loc='best')#, markerscale=1.5), fontsize=12)
-        str0 = f"dim: {self.params['x_dim']}; "
-        str1 = (r'$\mathcal{N}_1(\sqrt{2}\hat x;$'
-                + r'${{{0}}}),$'.format(self.params['sigma']))
-        str2 = (r' $\mathcal{N}_2(\sqrt{2}\hat y; $'
-                + r'${{{0}}})$'.format(self.params['sigma']))
-        ax.set_title(str0 + str1 + str2, y=1.15)
-        #ax.set_ylim((-0.05, 1.))
+        try:
+            fig, ax = plt.subplots()
+            #  import pdb
+            #  pdb.set_trace()
+            ax.errorbar(self.steps_arr, self.tunneling_rates_avg_all,
+                        yerr=self.tunneling_rates_err_all, capsize=1.5,
+                        capthick=1.5, color='C0', marker='.', ls='--',
+                        fillstyle='none')
+            ax1 = ax.twiny()
+            ax1.errorbar(self.temp_arr, self.tunneling_rates_avg_all,
+                        yerr=self.tunneling_rates_err_all, capsize=1.5,
+                        capthick=1.5, color='C1', marker='.', ls='-', alpha=0.8,
+                        fillstyle='none')
+            ax.set_ylabel('Tunneling rate')#, fontsize=16)
+            ax.set_xlabel('Training step', color='C0')
+            ax1.set_xlabel('Temperature', color='C1')
+            ax.tick_params('x', colors='C0')
+            ax1.tick_params('x', colors='C1')
+            #  ax.set_xlabel('Training step')#, fontsize=16)
+            #ax.legend(loc='best')#, markerscale=1.5), fontsize=12)
+            str0 = (f"{self.params['num_distributions']}"
+                    + f" in {self.params['x_dim']} dims; ")
+            str1 = (r'$\mathcal{N}_{\hat \mu}(\sqrt{2}\hat \mu;$'
+                    + r'${{{0}}}),$'.format(self.params['sigma']))
+            #  str2 = (r' $\mathcal{N}_2(\sqrt{2}\hat y; $'
+            #          + r'${{{0}}})$'.format(self.params['sigma']))
+            ax.set_title(str0 + str1, y=1.15)
+            #ax.set_ylim((-0.05, 1.))
+        except ValueError:
+            import pdb
+            pdb.set_trace()
         fig.tight_layout()
         out_file = (self.figs_dir
                     + f'tunneling_rate_{int(self.steps_arr[-1])}.pdf')
@@ -312,16 +321,17 @@ class GaussianMixtureModel(object):
 
     def _save_variables(self):
         """Save current values of variables."""
-        with open(self.tunneling_events_all_file, 'wb') as f:
-            pickle.dump(self.tunneling_events_all, f)
+        #  with open(self.tunneling_events_all_file, 'wb') as f:
+        #      pickle.dump(self.tunneling_events_all, f)
+        print(f"Saving parameter values to: {self.info_dir}")
         with open(self.tunneling_rates_all_file, 'wb') as f:
             pickle.dump(self.tunneling_rates_all, f)
         with open(self.params_file, 'wb') as f:
             pickle.dump(self.params, f)
 
         np.save(self.info_dir + 'steps_array', np.array(self.steps_arr))
-        np.save(self.info_dir + 'training_samples',
-                np.array(self.training_samples))
+        #  np.save(self.info_dir + 'training_samples',
+        #          np.array(self.training_samples))
         np.save(self.info_dir + 'temp_array',
                 np.array(self.temp_arr))
         np.save(self.info_dir + 'tunneling_info',
@@ -332,6 +342,7 @@ class GaussianMixtureModel(object):
                 np.array(self.tunneling_rates_avg_all))
         np.save(self.info_dir + 'tunneling_rates_err_all',
                 np.array(self.tunneling_rates_err_all))
+        print("done!\n")
 
     def _load_variables(self):
         """Load variables from previously ran experiment."""
@@ -346,8 +357,8 @@ class GaussianMixtureModel(object):
 
         self.temp_arr = list(np.load(self.info_dir + 'temp_array.npy'))
         self.temp = self.temp_arr[-1]
-        self.training_samples = list(np.load(self.info_dir
-                                             + 'training_samples.npy'))
+        #  self.training_samples = list(np.load(self.info_dir
+        #                                       + 'training_samples.npy'))
         self.tunneling_info = list(np.load(self.info_dir
                                            + 'tunneling_info.npy'))
         self.means = np.load(self.info_dir + 'means.npy')
@@ -362,9 +373,15 @@ class GaussianMixtureModel(object):
 
         with open(self.tunneling_rates_all_file, 'rb') as f:
             self.tunneling_rates_all = pickle.load(f)
-        with open(self.tunneling_events_all_file, 'rb') as f:
-            self.tunneling_events_all = pickle.load(f)
-        print('done.\n')
+        #  with open(self.tunneling_events_all_file, 'rb') as f:
+        #      self.tunneling_events_all = pickle.load(f)
+        print('done!\n')
+        #  if len(self.temp_arr) != len(self.tunneling_rates_avg_all):
+        #      import pdb
+        #      pdb.set_trace()
+        #  if len(self.steps_arr) != len(self.tunneling_rates_avg_all):
+        #      pdb.set_trace()
+
 
     def build_graph(self):
         """Build the graph for our model."""
@@ -393,44 +410,66 @@ class GaussianMixtureModel(object):
     def calc_tunneling_rates(self, trajectories):
         """Calculate tunneling rates from trajectories."""
         tunneling_rate = []
-        tunneling_events = []
+        #  tunneling_events = []
         for i in range(trajectories.shape[1]):
-            events, rate = find_tunneling_events(trajectories[:, i, :],
-                                                 self.means,
-                                                 self.params['num_distributions'])
+            rate = find_tunneling_events(trajectories[:, i, :], self.means,
+                                         self.params['num_distributions'])
             tunneling_rate.append(rate)
-            tunneling_events.append(events)
+            #  tunneling_events.append(events)
         tunneling_rate_avg = np.mean(tunneling_rate)
         tunneling_rate_std = np.std(tunneling_rate)
-        return (tunneling_events, tunneling_rate, tunneling_rate_avg,
+        return (tunneling_rate, tunneling_rate_avg,
                 tunneling_rate_std)
 
-    def calc_tunneling_rates_errors(self, num_blocks=100):
+    def calc_tunneling_rates_errors(self, step, num_blocks=100):
         """Calculate tunneling rates with block jackknife resampling method for
         carrying out error analysis.
         
         Args:
             num_blocks (int):
                 Number of blocks to use for block jackknife resampling.
+
+        TODO:
+            pass key (indicating step) of self.tunneling_rates_all dictionary
+        to avoid having to recompute errors from previous steps. 
+        i.e.
+            calc_tunneling_rates_errors(self, step_key, num_blocks=100)
+        then it would just be
+            tunneling_rates_arr = np.array(self.tunneling_rates_all[key_step])
+            avg_tr_vals = []
+            avg_tr_errs = []
+            for row in tunneling_rates_arr:
+                ...
         """
-        tunneling_rates_all_cp = {}
-        for key, val in self.tunneling_rates_all.items():
-            new_key = int(key)
-            tunneling_rates_all_cp[new_key] = val
-        tunneling_rates_all_arr = np.array(list(tunneling_rates_all_cp.values()))
-        avg_tr_vals = []
-        avg_tr_errs = []
-        for row in tunneling_rates_all_arr:
-            avg_val = np.mean(row)
-            avg_tr_vals.append(avg_val)
-            data_rs = block_resampling(np.array(val), num_blocks)
-            avg_tr_rs = []
-            for block in data_rs:
-                avg_tr_rs.append(np.mean(block))
-            error = jackknife_err(y_i=avg_tr_rs, y_full=avg_val,
-                                  num_blocks=num_blocks) / len(row)
-            avg_tr_errs.append(error)
-        return avg_tr_vals, avg_tr_errs
+        #  tunneling_rates_all_cp = {}
+        #  for key, val in self.tunneling_rates_all.items():
+        #      new_key = int(key)
+        #      tunneling_rates_all_cp[new_key] = val
+        #  tunneling_rates_all_arr = np.array(list(tunneling_rates_all_cp.values()))
+        #  avg_tr_vals = []
+        #  avg_tr_errs = []
+        #  for row in tunneling_rates_arr:
+            #  avg_val = np.mean(row)
+            #  avg_tr_vals.append(avg_val)
+            #  data_rs = block_resampling(np.array(val), num_blocks)
+            #  avg_tr_rs = []
+            #  for block in data_rs:
+            #      avg_tr_rs.append(np.mean(block))
+            #  error = jackknife_err(y_i=avg_tr_rs, y_full=avg_val,
+            #                        num_blocks=num_blocks) / len(row)
+            #  avg_tr_errs.append(error)
+        #  return avg_tr_vals, avg_tr_errs
+        tunneling_rates_arr = np.array(self.tunneling_rates_all[step])
+        tunneling_rates_avg = np.mean(tunneling_rates_arr)
+        tunneling_rates_avg_rs = []
+        data_rs = block_resampling(np.array(tunneling_rates_arr), num_blocks)
+        for block in data_rs:
+            tunneling_rates_avg_rs.append(np.mean(block))
+        error = jackknife_err(y_i=tunneling_rates_avg_rs,
+                              y_full=tunneling_rates_avg,
+                              num_blocks=num_blocks) / len(tunneling_rates_arr)
+        return tunneling_rates_avg, error
+
 
     def train(self, num_train_steps, config=None):
         """Train the model."""
@@ -448,7 +487,7 @@ class GaussianMixtureModel(object):
                 print('Model restored.\n')
                 self.global_step = tf.train.get_global_step()
                 initial_step = sess.run(self.global_step)
-                self._load_variables()
+                #  self._load_variables()
 
             writer = tf.summary.FileWriter(self.log_dir, sess.graph)
             #initial_step = int(self.global_step.eval())
@@ -482,10 +521,9 @@ class GaussianMixtureModel(object):
                               f"temp: {self.temp:.5f}\n ")
 
                     if step % self.params['annealing_steps'] == 0:
-                        # decaying annealing rate at low temperatures
-                        if self.temp < 5:
-                            self.params['annealing_rate'] *= 0.99
-
+                        #  decaying annealing rate at low temperatures
+                        #  if self.temp < 5:
+                        #      self.params['annealing_rate'] *= 0.99
                         tt = self.temp * self.params['annealing_rate']
                         if tt > 1:
                             self.temp = tt
@@ -496,65 +534,72 @@ class GaussianMixtureModel(object):
                         self.steps_arr.append(step+1)
 
                         trajectories = self.generate_trajectories(sess)
-                        self.training_samples.append(trajectories)
-                        current_info = self.calc_tunneling_rates(trajectories)
-                        self.tunneling_events_all[step] = current_info[0]
-                        self.tunneling_rates_all[step] = current_info[1]
-                        tunneling_rate_avg = current_info[2]
-                        tunneling_rate_std = current_info[3]
+                        #  self.training_samples.append(trajectories)
+                        tunneling_stats = self.calc_tunneling_rates(trajectories)
+                        #  self.tunneling_events_all[step] = current_info[0]
+                        self.tunneling_rates_all[step] = tunneling_stats[0]
+                        tunneling_rate_avg = tunneling_stats[1]
+                        tunneling_rate_std = tunneling_stats[2]
                         tunneling_info = [step, tunneling_rate_avg,
                                           tunneling_rate_std]
                         self.tunneling_info.append(tunneling_info)
 
-                        avg_info = self.calc_tunneling_rates_errors()
-                        self.tunneling_rates_avg_all = avg_info[0]
-                        self.tunneling_rates_err_all = avg_info[1]
+                        avg_info = self.calc_tunneling_rates_errors(step)
+                        new_tunneling_rate = avg_info[0]
+                        prev_tunneling_rate = self.tunneling_rates_avg_all[-1]
+                        self.tunneling_rates_avg_all.append(avg_info[0])
+                        self.tunneling_rates_err_all.append(avg_info[1])
 
-
+                        if new_tunneling_rate <= prev_tunneling_rate:
+                            print("\n\tTunneling rate decreased! Reversing"
+                                  "annealing step!\n")
+                            tt = self.temp / self.params['annealing_rate']
+                            self.temp = tt
+                            #  if tt > 1:
+                        #  self.tunneling_rates_avg_all = avg_info[0]
+                        #  self.tunneling_rates_err_all = avg_info[1]
 
                         print(f"\n\t Step: {step}, "
+                              #  f"Tunneling rate avg: {avg_info[0][-1]}, "
+                              #  f"Tunnneling rate err: {avg_info[1][-2]}\n")
                               f"Tunneling rate avg: {tunneling_rate_avg}, "
                               f"Tunnneling rate std: {tunneling_rate_std}\n")
                         tt = time.time()
                         tunneling_time = int(tt - t1)
-                        elapsed_time = int(tt- t0)
-                        #  if step + 1 > self.tunneling_rate_steps:
-                            #  training_time = int(t2 - t1)
-                            #  t_str1 = time.strftime("%H:%M:%S",
-                            #                         time.gmtime(training_time))
-                            #  print('\ttime to train for'
-                            #        f'{self.tunneling_rate_steps}' + t_str1)
+                        elapsed_time = int(tt - t0)
+                        time_per_step100 = 100*int(tt - t0) / step
 
                         t_str2 = time.strftime("%H:%M:%S",
                                                time.gmtime(tunneling_time))
                         t_str = time.strftime("%H:%M:%S",
                                               time.gmtime(elapsed_time))
-                        #  h = elapsed_time // 3600
-                        #  m = elapsed_time % 3600 // 60
-                        #  s = elapsed_time % 60
-                        #  print(f'\n\t Time elapsed: {h:02d}:{m:02d}:{s:02d}\n')
+                        t_str3 = time.strftime("%H:%M:%S",
+                                              time.gmtime(time_per_step100))
 
                         print('\tTime spent calculating tunneling_rate: ' + t_str2)
-                        print('\n\tTotal time elapsed: ' + t_str + '\n')
+                        print('\tTime per 100 steps: ' + t_str3)
+                        print('\tTotal time elapsed: ' + t_str + '\n')
 
-                        #  import pdb
-                        #  pdb.set_trace()
                         self.plot_tunneling_rates()
-                        self._save_variables()
+                        #  self._save_variables()
 
                     if (step + 1) % self.params['save_steps'] == 0:
+                        self._save_variables()
                         ckpt_file = os.path.join(self.log_dir, 'model.ckpt')
                         print(f'Saving checkpoint to: {ckpt_file}\n')
                         saver.save(sess, ckpt_file, global_step=step)
+
                 writer.close()
+
             except (KeyboardInterrupt, SystemExit):
                 print("KeyboardInterrupt detected, saving current state and"
                       " exiting. ")
-                self.plot_tunneling_rates()
+                #  self.plot_tunneling_rates()
                 self._save_variables()
                 ckpt_file = os.path.join(self.log_dir, 'model.ckpt')
                 print(f'Saving checkpoint to: {ckpt_file}\n')
                 saver.save(sess, ckpt_file, global_step=step)
+                writer.flush()
                 writer.close()
 
 
@@ -577,14 +622,14 @@ def main(args):
         'annealing_rate': 0.98,
         'eps': 0.1,
         'scale': 0.1,
-        'num_samples': 200,
-        'train_trajectory_length': 2000,
+        'num_samples': 100,
+        'train_trajectory_length': 1000,
         'means': MEANS,
         'sigma': 0.05,
         'small_pi': 2E-16,
         'num_training_steps': 20000,
         'annealing_steps': 100,
-        'tunneling_rate_steps': 500,
+        'tunneling_rate_steps': 1000,
         'lr_decay_steps': 1000,
         'save_steps': 2500,
         'logging_steps': 100
