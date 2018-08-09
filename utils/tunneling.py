@@ -33,9 +33,9 @@ def calc_tunneling_rate(trajectory, min_distance):
     return tunneling_events, tunneling_rate
 
 def match_distribution(x, means, num_distributions):
-    """Given a point x and multiple unique normal distributions (each with their
-    own respective mean), try to identify which distribution the point x
-    belongs to.
+    """Given a point x and multiple distributions (each with their own
+    respective mean, contained in `means`), try to identify which distribution
+    the point x belongs to.
 
     Args:
         point (scalar or array-like):
@@ -43,6 +43,8 @@ def match_distribution(x, means, num_distributions):
         means (array-like):
             Array containing the mean vectors of different normal
             distributions.
+    Returns:
+        Index in `means` corresponding to the distribution `x` is closest  to.
     """
     norm_diff_arr = []
     #for mean in means:
@@ -55,7 +57,7 @@ def match_distribution(x, means, num_distributions):
 
 def find_tunneling_events(trajectory, means, num_distributions):
     idxs = [(i, i+1) for i in range(len(trajectory) - 1)]
-    tunneling_events = {}
+    #  tunneling_events = {}
     num_events = 0
     for pair in idxs:
         x0 = trajectory[pair[0]]
@@ -63,7 +65,7 @@ def find_tunneling_events(trajectory, means, num_distributions):
         dist0 = match_distribution(x0, means, num_distributions)
         dist1 = match_distribution(x1, means, num_distributions)
         if dist1 != dist0:
-            tunneling_events[pair] = [x0, x1]
+            #  tunneling_events[pair] = [x0, x1]
             num_events += 1
     tunneling_rate = num_events / (len(trajectory) - 1)
-    return tunneling_events, tunneling_rate
+    return tunneling_rate
