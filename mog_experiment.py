@@ -546,9 +546,15 @@ class GaussianMixtureModel(object):
 
                         avg_info = self.calc_tunneling_rates_errors(step)
                         new_tunneling_rate = avg_info[0]
-                        prev_tunneling_rate = self.tunneling_rates_avg_all[-1]
+                        prev_tunneling_rate = 0
+                        if len(self.tunneling_rates_avg_all) > 1:
+                            prev_tunneling_rate = (
+                                self.tunneling_rates_avg_all[-1]
+                            )
+
                         self.tunneling_rates_avg_all.append(avg_info[0])
                         self.tunneling_rates_err_all.append(avg_info[1])
+
 
                         if new_tunneling_rate <= prev_tunneling_rate:
                             print("\n\tTunneling rate decreased! Reversing"
