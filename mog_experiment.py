@@ -511,7 +511,7 @@ class GaussianMixtureModel(object):
                                                      prev_tunneling_rate)
                         #  if the tunneling rate decreased since the last time
                         #  it was calculated, restart the temperature 
-                        if tunneling_rate_diff < avg_info[1]:
+                        if tunneling_rate_diff > avg_info[1]:
                             # the following will revert self.temp to a value
                             # slightly smaller than the value it had previously
                             # the last time the tunneling rate was calculated
