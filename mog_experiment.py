@@ -31,6 +31,17 @@ from utils.jackknife import block_resampling, jackknife_err
 # look at scaling with dimensionality, look at implementing simple U2 model
 # into distributions and see if any unforseen prooblems arise. 
 
+
+#  go back to 2D case look aat different staarting temperaturers
+#  make trajectorry length go with rroot T, go with higher initial temperatuer
+# in 2D start with higher initial temp to get arorund 50% acceptance raate
+
+#  define distance as difference in averrage plaquette
+#  look at site by site difference in plaaquette (noot sum) to prevent integer
+#  values that would be tnhe same across different configurrtaions
+#  try to get network to be compatible with complex numbers aand eventuaally
+#  complex matrrices
+
 def distribution_arr(x_dim, n_distributions):
     assert x_dim >= n_distributions, ("n_distributions must be less than or"
                                       " equal to x_dim.")
@@ -493,8 +504,8 @@ class GaussianMixtureModel(object):
                         print(f"\n\tStep: {step}, "
                               #  f"Tunneling rate avg: {avg_info[0][-1]}, "
                               #  f"Tunnneling rate err: {avg_info[1][-2]}\n")
-                              f"Tunneling rate avg: {avg_info[0]}, "
-                              f"Tunneling rate err: {avg_info[1]}, "
+                              f"Tunneling rate avg: {avg_info[0]:.4g}, "
+                              f"Tunneling rate err: {avg_info[1]:.4g}, "
                               f"temp: {self.temp:.3g}")
 
 
@@ -507,21 +518,23 @@ class GaussianMixtureModel(object):
                         if len(self.tunneling_rates_avg) > 1:
                             prev_tunneling_rate = self.tunneling_rates_avg[-2]
 
-                        tunneling_rate_diff = np.abs(new_tunneling_rate -
-                                                     prev_tunneling_rate)
+                        tunneling_rate_diff = (new_tunneling_rate
+                                               - prev_tunneling_rate
+                                               + 2 * avg_info[1])
+
                         #  if the tunneling rate decreased since the last time
                         #  it was calculated, restart the temperature 
-                        if tunneling_rate_diff < avg_info[1]:
+                        if tunneling_rate_diff < 0:
                             # the following will revert self.temp to a value
                             # slightly smaller than the value it had previously
                             # the last time the tunneling rate was calculated
-                            print("\tTunneling rate decreased!")
+                            print("\n\tTunneling rate decreased!")
                             print("\tNew tunneling rate:"
                                   f" {new_tunneling_rate:.3g},"
                                   "Previous tunneling_rate:"
                                   f" {prev_tunneling_rate:.3g},"
                                   f"diff: {tunneling_rate_diff:.3g}\n")
-                            print("\t Resetting temperature...")
+                            print("\tResetting temperature...")
                             if len(self.temp_arr) > 1:
                                 prev_temp = self.temp_arr[-2]
                                 new_temp = (prev_temp *
@@ -590,13 +603,13 @@ def main(args):
         'annealing_rate': 0.98,
         'eps': 0.1,
         'scale': 0.1,
-        'num_samples': 100,
-        'train_trajectory_length': 1000,
+        'num_samples': 200,
+        'train_trajectory_length': 2000,
         'means': MEANS,
         'sigma': 0.05,
         'small_pi': 2E-16,
         'num_training_steps': 20000,
-        'annealing_steps': 100,
+        'annealing_steps': 200,
         'tunneling_rate_steps': 500,
         'lr_decay_steps': 1000,
         'save_steps': 2500,
