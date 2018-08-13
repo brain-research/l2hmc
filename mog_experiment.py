@@ -271,7 +271,7 @@ class GaussianMixtureModel(object):
             os.makedirs(figs_dir)
         return log_dir, info_dir, figs_dir
 
-    def _create_dynamics(self, T=10, eps=0.1, use_temperature=True):
+    def _create_dynamics(self, T, eps, use_temperature=True):
         """ Create dynamics object using 'utils/dynamics.py'. """
         energy_function = self.distribution.get_energy_function()
         self.dynamics = Dynamics(self.params['x_dim'],
@@ -386,7 +386,8 @@ class GaussianMixtureModel(object):
         if self.log_dir is None:
             self._create_log_dir()
         #energy_function = self.distribution.get_energy_function()
-        self._create_dynamics(T=10, eps=self.params['eps'],
+        self._create_dynamics(T=self.temp,
+                              eps=self.params['eps'],
                               use_temperature=True)
         self._create_loss()
         self._create_optimizer()
@@ -639,7 +640,7 @@ def main(args):
 
 
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    #  config.gpu_options.allow_growth = True
     model.build_graph()
     model.train(params['num_training_steps'], config=config)
 
