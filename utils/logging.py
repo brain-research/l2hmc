@@ -6,14 +6,12 @@ def get_run_num(log_dir):
         os.makedirs(log_dir)
     contents = os.listdir(log_dir)
 
-    run_nums = []
+    run_nums = [0]
     for item in contents:
         try:
             run_nums.append(int(''.join(x for x in item if x.isdigit())))
         except ValueError:
             continue
-    if run_nums == []:
-        run_nums.append(0)
     return sorted(run_nums)[-1] + 1
     #  if contents == ['.DS_Store']:
     #      return 1
