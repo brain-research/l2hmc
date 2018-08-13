@@ -12,7 +12,10 @@ def get_run_num(log_dir):
             run_nums.append(int(''.join(x for x in item if x.isdigit())))
         except ValueError:
             continue
-    return sorted(run_nums)[-1] + 1
+    try:
+        return sorted(run_nums)[-1] + 1
+    except IndexError:
+        return 1
     #  if contents == ['.DS_Store']:
     #      return 1
     #  else:

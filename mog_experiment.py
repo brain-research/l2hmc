@@ -41,6 +41,13 @@ from utils.jackknife import block_resampling, jackknife_err
 #  values that would be tnhe same across different configurrtaions
 #  try to get network to be compatible with complex numbers aand eventuaally
 #  complex matrrices
+###########################################################
+#  TODO:
+#   * Go back to 2D case and look at different starting temperatures
+#   * Make trajectory length go with root T, go with higher temperature
+#   * In 2D 
+
+###########################################################
 
 def distribution_arr(x_dim, n_distributions):
     assert x_dim >= n_distributions, ("n_distributions must be less than or"
@@ -509,10 +516,6 @@ class GaussianMixtureModel(object):
                               f"temp: {self.temp:.3g}")
 
 
-                        #######################################################
-                        #  TODO: Implement tempearture refresh if
-                        #  tunneling_rate decreases.
-                        #######################################################
                         new_tunneling_rate = avg_info[0]
                         prev_tunneling_rate = 0
                         if len(self.tunneling_rates_avg) > 1:
