@@ -35,7 +35,7 @@ class Dynamics(object):
   def __init__(self,
                x_dim,
                energy_function,
-               T=25,
+               T=10,
                eps=0.1,
                hmc=False,
                net_factory=None,

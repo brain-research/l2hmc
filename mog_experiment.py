@@ -177,11 +177,13 @@ class GaussianMixtureModel(object):
         self.params['annealing_rate'] = params.get('annealing_rate', 0.98)
         self.params['eps'] = params.get('eps', 0.1)
         self.params['scale'] = params.get('scale', 0.1)
-        self.params['num_training_steps'] = params.get('num_training_steps',
-                                                       2e4)
+        nts = params.get('num_training_steps', 2e4)
+        self.params['num_training_steps'] = nts
         self.params['num_samples'] = params.get('num_samples', 200)
-        ttl = params.get('train_trajectory_length', 2e3)
-        self.params['train_trajectory_length'] = ttl
+        ttl0 = params.get('train_trajectory_length', 10)
+        self.params['train_trajectory_length'] = ttl0
+        ttl1 = params.get('test_trajectory_length', 2e3)
+        self.params['test_trajectory_length'] = ttl1
         self.params['sigma'] = params.get('sigma', 0.05)
         self.params['small_pi'] = params.get('small_pi', 2e-16)
         self.params['logging_steps'] = params.get('logging_steps', 100)
@@ -271,7 +273,7 @@ class GaussianMixtureModel(object):
             os.makedirs(figs_dir)
         return log_dir, info_dir, figs_dir
 
-    def _create_dynamics(self, T, eps, use_temperature=True):
+    def _create_dynamics(self, T=10, eps=0.1, use_temperature=True):
         """ Create dynamics object using 'utils/dynamics.py'. """
         energy_function = self.distribution.get_energy_function()
         self.dynamics = Dynamics(self.params['x_dim'],
@@ -343,7 +345,7 @@ class GaussianMixtureModel(object):
         with open(self.params_file, 'wb') as f:
             pickle.dump(self.params, f)
 
-
+        np.save(self.info_dir + 'losses_array', np.array(self.losses))
         np.save(self.info_dir + 'steps_array', np.array(self.steps_arr))
         np.save(self.info_dir + 'temp_array',
                 np.array(self.temp_arr))
@@ -369,6 +371,7 @@ class GaussianMixtureModel(object):
         self.steps_arr = list(np.load(self.info_dir + 'steps_array.npy'))
         self.temp_arr = list(np.load(self.info_dir + 'temp_array.npy'))
         self.temp = self.temp_arr[-1]
+        self.losses = list(np.load(self.info_dir + 'losses_array.npy'))
 
         self.means = np.load(self.info_dir + 'means.npy')
         self.covs = np.load(self.info_dir + 'covariances.npy')
@@ -380,13 +383,12 @@ class GaussianMixtureModel(object):
         self.tunneling_rates_err = list(np.load(self.info_dir
                                                 + 'tunneling_rates_err.npy'))
 
-
     def build_graph(self):
         """Build the graph for our model."""
         if self.log_dir is None:
             self._create_log_dir()
         #energy_function = self.distribution.get_energy_function()
-        self._create_dynamics(T=self.temp,
+        self._create_dynamics(T=self.params['train_trajectory_length'],
                               eps=self.params['eps'],
                               use_temperature=True)
         self._create_loss()
@@ -400,13 +402,20 @@ class GaussianMixtureModel(object):
         """
         _samples = self.distribution.get_samples(self.params['num_samples'])
         _trajectories = []
-        for step in range(self.params['train_trajectory_length']):
+        _loss_arr = []
+        _px_arr = []
+        for step in range(self.params['test_trajectory_length']):
             _trajectories.append(np.copy(_samples))
-            _feed_dict = {
-                self.x: _samples, self.dynamics.temperature:  1.,
-            }
-            _samples = sess.run(self.output[0], _feed_dict)
-        return np.array(_trajectories)
+            _feed_dict = {self.x: _samples,
+                          self.dynamics.temperature:  1.,}
+            _loss, _samples, _px = sess.run([
+                self.loss,
+                self.output[0],
+                self.px
+            ], feed_dict=_feed_dict)
+            _loss_arr.append(np.copy(_loss))
+            _px_arr.append(np.copy(_px))
+        return np.array(_trajectories), np.array(_loss_arr), np.array(_px_arr)
 
     def calc_tunneling_rates(self, trajectories):
         """Calculate tunneling rates from trajectories."""
@@ -438,7 +447,6 @@ class GaussianMixtureModel(object):
                               y_full=tunneling_rates_avg,
                               num_blocks=num_blocks) / len(tunneling_rates_arr)
         return tunneling_rates_avg, error
-
 
     def train(self, num_train_steps, config=None):
         """Train the model."""
@@ -479,10 +487,10 @@ class GaussianMixtureModel(object):
                         writer.add_summary(summary_str, global_step=step)
                         writer.flush()
                         print(f"Step: {step} / {initial_step + num_train_steps}, "
-                              f"Loss: {loss_:.4e}, "
-                              f"Acceptance sample: {np.mean(px_):.2f}, "
-                              f"LR: {lr_:.5f}, "
-                              f"temp: {self.temp:.5f}\n ")
+                              f"Loss: {loss_:.4g}, "
+                              f"Acceptance sample: {np.mean(px_):.2g}, "
+                              f"LR: {lr_:.5g}, "
+                              f"temp: {self.temp:.5g}\n ")
 
                     if step % self.params['annealing_steps'] == 0:
                         tt = self.temp * self.params['annealing_rate']
@@ -495,7 +503,11 @@ class GaussianMixtureModel(object):
                         self.temp_arr.append(self.temp)
                         self.steps_arr.append(step+1)
 
-                        trajectories = self.generate_trajectories(sess)
+                        trajectory_stats = self.generate_trajectories(sess)
+                        trajectories = trajectory_stats[0]
+                        loss_arr = trajectory_stats[1]
+                        px_arr = trajectory_stats[2]
+
                         tunneling_stats = self.calc_tunneling_rates(trajectories)
 
                         self.tunneling_rates[step] = tunneling_stats[0]
@@ -515,39 +527,42 @@ class GaussianMixtureModel(object):
                               f"Tunneling rate avg: {avg_info[0]:.4g}, "
                               f"Tunneling rate err: {avg_info[1]:.4g}, "
                               f"temp: {self.temp:.3g}")
+                        print(f"\tAverage loss: {np.mean(loss_arr):.4g}, "
+                              f"Average acceptance: {np.mean(px_arr):.4g}")
 
+                        if self.temp < 10:
+                            new_tunneling_rate = avg_info[0]
+                            prev_tunneling_rate = 0
+                            if len(self.tunneling_rates_avg) > 1:
+                                prev_tunneling_rate = self.tunneling_rates_avg[-2]
 
-                        new_tunneling_rate = avg_info[0]
-                        prev_tunneling_rate = 0
-                        if len(self.tunneling_rates_avg) > 1:
-                            prev_tunneling_rate = self.tunneling_rates_avg[-2]
+                            tunneling_rate_diff = (new_tunneling_rate
+                                                   - prev_tunneling_rate
+                                                   + 2 * avg_info[1])
 
-                        tunneling_rate_diff = (new_tunneling_rate
-                                               - prev_tunneling_rate
-                                               + 2 * avg_info[1])
-
-                        #  if the tunneling rate decreased since the last time
-                        #  it was calculated, restart the temperature 
-                        if tunneling_rate_diff < 0:
-                            # the following will revert self.temp to a value
-                            # slightly smaller than the value it had previously
-                            # the last time the tunneling rate was calculated
-                            print("\n\tTunneling rate decreased!")
-                            print("\tNew tunneling rate:"
-                                  f" {new_tunneling_rate:.3g},"
-                                  "Previous tunneling_rate:"
-                                  f" {prev_tunneling_rate:.3g},"
-                                  f"diff: {tunneling_rate_diff:.3g}\n")
-                            print("\tResetting temperature...")
-                            if len(self.temp_arr) > 1:
-                                prev_temp = self.temp_arr[-2]
-                                new_temp = (prev_temp *
-                                            self.params['annealing_rate'])
-                                print(f"\tCurrent temp: {self.temp:.3g}, "
-                                      f"\t Previous temp: {prev_temp:.3g}, "
-                                      f"\t New temp: {new_temp:.3g}\n")
-                                self.temp = new_temp
-                                self.temp_arr[-1] = self.temp
+                            #  if the tunneling rate decreased since the last
+                            #  time it was calculated, restart the temperature 
+                            if tunneling_rate_diff < 0:
+                                # the following will revert self.temp to a
+                                # value slightly smaller than the value it had
+                                # previously the last time the tunneling rate
+                                # was calculated
+                                print("\n\tTunneling rate decreased!")
+                                print("\tNew tunneling rate:"
+                                      f" {new_tunneling_rate:.3g}, "
+                                      "Previous tunneling_rate:"
+                                      f" {prev_tunneling_rate:.3g}, "
+                                      f"diff: {tunneling_rate_diff:.3g}\n")
+                                print("\tResetting temperature...")
+                                if len(self.temp_arr) > 1:
+                                    prev_temp = self.temp_arr[-2]
+                                    new_temp = (prev_temp *
+                                                self.params['annealing_rate'])
+                                    print(f"\tCurrent temp: {self.temp:.3g}, "
+                                          f"\t Previous temp: {prev_temp:.3g}, "
+                                          f"\t New temp: {new_temp:.3g}\n")
+                                    self.temp = new_temp
+                                    self.temp_arr[-1] = self.temp
                         #######################################################
 
                         tt = time.time()
@@ -562,7 +577,7 @@ class GaussianMixtureModel(object):
                         t_str3 = time.strftime("%H:%M:%S",
                                               time.gmtime(time_per_step100))
 
-                        print(f'\tTime to calculate tunneling_rate: {t_str2}')
+                        print(f'\n\tTime to calculate tunneling_rate: {t_str2}')
                         print(f'\tTime for 100 training steps: {t_str3}')
                         print(f'\tTotal time elapsed: {t_str}\n')
 
@@ -608,7 +623,8 @@ def main(args):
         'eps': 0.1,
         'scale': 0.1,
         'num_samples': 200,
-        'train_trajectory_length': 2000,
+        'train_trajectory_length': 10,
+        'test_trajectory_length': 2000,
         'means': MEANS,
         'sigma': 0.05,
         'small_pi': 2E-16,
@@ -626,6 +642,12 @@ def main(args):
         params['eps'] = args.step_size
     if args.temp_init:
         params['temp_init'] = args.temp_init
+    if args.num_samples:
+        params['num_samples'] = args.num_samples
+    if args.train_trajectory_length:
+        params['train_trajectory_length'] = args.train_trajectory_length
+    if args.test_trajectory_length:
+        params['test_trajectory_length'] = args.test_trajectory_length
     if args.num_steps:
         params['num_training_steps'] = args.num_steps
     if args.annealing_steps:
@@ -640,7 +662,7 @@ def main(args):
 
 
     config = tf.ConfigProto()
-    #  config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True
     model.build_graph()
     model.train(params['num_training_steps'], config=config)
 
@@ -664,10 +686,22 @@ if __name__ == '__main__':
                         required=False, help="Initial temperature to use for "
                         "annealing. (Default: 20)")
 
+    parser.add_argument("--num_samples", default=200, type=int, required=False,
+                        help="Number of samples to use for batched training. "
+                        "(Default: 200)")
+
     parser.add_argument("--step_size", default=0.1, type=float, required=False,
-                        help="Initial step size to use in leapfrog update,"
-                        "called `eps` in code. (This will be tuned for an"
+                        help="Initial step size to use in leapfrog update, "
+                        "called `eps` in code. (This will be tuned for an "
                         "optimal value during" "training)")
+
+    parser.add_argument("--test_trajectory_length", default=2000, type=int,
+                        required=False, help="Trajectory length to be used "
+                        "during testing. (Default: 2000)")
+
+    parser.add_argument("--train_trajectory_length", default=10, type=int,
+                        required=False, help="Trajectory length to be used "
+                        "during training. (Default: 10)")
 
     parser.add_argument("--annealing_steps", default=100, type=int,
                         required=False, help="Number of annealing steps."
