@@ -98,7 +98,10 @@ class Sequential(object):
 class ScaleTanh(object):
   def __init__(self, in_, scope='scale_tanh'):
     with tf.variable_scope(scope):
-      self.scale = tf.exp(tf.get_variable('scale', shape=(1, in_), initializer=tf.constant_initializer(0., dtype=TF_FLOAT)))
+      self.scale = tf.exp(tf.get_variable(
+          'scale', shape=(1, in_),
+          initializer=tf.constant_initializer(0., dtype=TF_FLOAT)
+      ))
   def __call__(self, x):
     return self.scale * tf.nn.tanh(x)
 

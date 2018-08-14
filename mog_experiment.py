@@ -8,7 +8,7 @@ import sys
 import os
 import signal
 import pickle
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+#  os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
 from mpl_toolkits.mplot3d import Axes3D
 from utils.func_utils import accept, jacobian, autocovariance,\
@@ -23,31 +23,24 @@ from utils.tunneling import distance, calc_min_distance, calc_tunneling_rate,\
         find_tunneling_events
 from utils.jackknife import block_resampling, jackknife_err
 
-# increase dimensionality until learrning slows to a crawl
-# see how each of the Q, S, and T functions impacts learning rate and so on
-# number of learning steps isn't limiting factor, concerned more with final
-# results and eventual tunneling rate instead of intermediate tunneling rates
 
 # look at scaling with dimensionality, look at implementing simple U2 model
 # into distributions and see if any unforseen prooblems arise. 
 
 
-#  go back to 2D case look aat different staarting temperaturers
-#  make trajectorry length go with rroot T, go with higher initial temperatuer
-# in 2D start with higher initial temp to get arorund 50% acceptance raate
-
-#  define distance as difference in averrage plaquette
-#  look at site by site difference in plaaquette (noot sum) to prevent integer
-#  values that would be tnhe same across different configurrtaions
-#  try to get network to be compatible with complex numbers aand eventuaally
-#  complex matrrices
-###########################################################
+###############################################################################
 #  TODO:
 #   * Go back to 2D case and look at different starting temperatures
 #   * Make trajectory length go with root T, go with higher temperature
-#   * In 2D 
-
-###########################################################
+#   * In 2D start with higher initial temp to get around 50% acceptance rate
+# -----------------------------------------------------------------------------
+#   * For Lattice model:
+#       - Define distance as difference in average plaquette.
+#       - Look at site by site difference in plaquette (not sum) to prevent
+#       integer values that would be the same across different configurations
+#       - Try to get network to be compatible with complex numbers and
+#       eventually complex matrices.
+###############################################################################
 
 def distribution_arr(x_dim, n_distributions):
     assert x_dim >= n_distributions, ("n_distributions must be less than or"
@@ -490,8 +483,8 @@ class GaussianMixtureModel(object):
                         writer.flush()
                         print(f"Step: {step}/{initial_step+num_train_steps}, "
                               f"Loss: {loss_:.4g}, "
-                              f"Acceptance sample: {np.mean(px_):.2g}, "
-                              f"LR: {lr_:.5g}, "
+                              f"accept rate: {np.mean(px_):.2g}, "
+                              f"LR: {lr_:.3g}, "
                               f"temp: {self.temp:.5g}, "
                               f"step size: {eps:.3g}\n")
 
@@ -533,7 +526,7 @@ class GaussianMixtureModel(object):
                         print(f"\tAverage loss: {np.mean(loss_arr):.4g}, "
                               f"Average acceptance: {np.mean(px_arr):.4g}")
 
-                        if self.temp < 10:
+                        if self.temp < 5:
                             new_tunneling_rate = avg_info[0]
                             prev_tunneling_rate = 0
                             if len(self.tunneling_rates_avg) > 1:
