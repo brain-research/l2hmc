@@ -481,6 +481,8 @@ class GaussianMixtureModel(object):
 
                     self.losses.append(loss_)
 
+                    eps = sess.run(self.dynamics.eps)
+
                     if step % self.params['logging_steps'] == 0:
                         summary_str = sess.run(self.summary_op,
                                                feed_dict=feed_dict)
@@ -491,7 +493,7 @@ class GaussianMixtureModel(object):
                               f"Acceptance sample: {np.mean(px_):.2g}, "
                               f"LR: {lr_:.5g}, "
                               f"temp: {self.temp:.5g}, "
-                              f"step size: {self.eps:.3g}\n")
+                              f"step size: {eps:.3g}\n")
 
                     if step % self.params['annealing_steps'] == 0:
                         tt = self.temp * self.params['annealing_rate']
