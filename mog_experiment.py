@@ -486,11 +486,12 @@ class GaussianMixtureModel(object):
                                                feed_dict=feed_dict)
                         writer.add_summary(summary_str, global_step=step)
                         writer.flush()
-                        print(f"Step: {step} / {initial_step + num_train_steps}, "
+                        print(f"Step: {step}/{initial_step+num_train_steps}, "
                               f"Loss: {loss_:.4g}, "
                               f"Acceptance sample: {np.mean(px_):.2g}, "
                               f"LR: {lr_:.5g}, "
-                              f"temp: {self.temp:.5g}\n ")
+                              f"temp: {self.temp:.5g}, "
+                              f"step size: {self.eps:.3g}\n")
 
                     if step % self.params['annealing_steps'] == 0:
                         tt = self.temp * self.params['annealing_rate']
